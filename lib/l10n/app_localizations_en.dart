@@ -17,9 +17,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Boost your happiness and mindfulness by daily gratitude journaling. Just start writing down what you are grateful for and why :)';
 
   @override
-  String get buttonRemovePrompt => 'Remove reflection prompt';
-
-  @override
   String get buttonStreak => 'Streak';
 
   @override
@@ -30,10 +27,23 @@ class AppLocalizationsEn extends AppLocalizations {
       'While moving your journal entries to your new account, a temporary glitch occurred.\n\nYou can either try the transfer again with a stable internet connection to merge previous entries or proceed by discarding. Discarding means your earlier journaling content will be permanently lost and cannot be restored.';
 
   @override
-  String get snackRemovePrompt => 'Reflection prompt removed';
+  String get buttonRemovePrompt => 'Remove journaling prompt';
 
   @override
-  String get titleShowReflection => 'Show reflection prompts';
+  String get snackRemovePrompt => 'Journaling prompt removed';
+
+  @override
+  String get dialogTitleChangeDate => 'Date';
+
+  @override
+  String get dialogTitleEditText => 'Text';
+
+  @override
+  String get dialogContentDeleteEntry =>
+      'Your journal entry will be deleted permanently.';
+
+  @override
+  String get titleShowReflection => 'Show journaling prompts';
 
   @override
   String get subtitleShowReflectionEnabled => 'Questions and inspirations';
@@ -48,13 +58,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get labelShowReflectionDisabled => 'What are you grateful for today?';
 
   @override
-  String get titleUseSameColor => 'Use same color each day';
+  String get titleColorIntensity => 'Choose color intensity of entries';
 
   @override
-  String get subtitleUseSameColorEnabled => 'Same-day entries share color';
+  String get dialogTitleColorIntensity => 'Color intensity';
 
   @override
-  String get subtitleUseSameColorDisabled => 'Daily color off';
+  String get subtitleColorIntensityVibrant => 'Bright vibrant colors';
+
+  @override
+  String get subtitleColorIntensityMuted => 'Soft muted colors';
+
+  @override
+  String get subtitleColorIntensityGray => 'Neutral gray color';
+
+  @override
+  String get titleUniqueColor => 'Choose color change of entries';
+
+  @override
+  String get dialogTitleUniqueColor => 'Color change';
+
+  @override
+  String get subtitleUniqueColorDisabled => 'Different color for each entry';
+
+  @override
+  String get subtitleUniqueColorEnabled =>
+      'Same color for entries of the same day';
 
   @override
   String get titleRemindMe => 'Remind me to journal';
@@ -68,7 +97,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get subtitleRemindMeDisabled => 'Reminder off';
 
   @override
-  String get buttonSetDailyTime => 'Set daily time';
+  String get dialogTitleDailyTime => 'Daily time';
 
   @override
   String get allowNotificationsAndroid =>

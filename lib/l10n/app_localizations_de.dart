@@ -17,9 +17,6 @@ class AppLocalizationsDe extends AppLocalizations {
       'Fördere deine Zufriedenheit und Achtsamkeit durch das Dankbarkeitstagebuch. Reflektiere und schreibe täglich auf, wofür du dankbar bist und warum :)';
 
   @override
-  String get buttonRemovePrompt => 'Reflexionsvorschlag entfernen';
-
-  @override
   String get buttonStreak => 'Serie';
 
   @override
@@ -30,16 +27,29 @@ class AppLocalizationsDe extends AppLocalizations {
       'Beim Verschieben deiner Tagebucheinträge auf dein neues Konto ist ein vorübergehender Fehler aufgetreten.\n\nDu kannst entweder die Übertragung erneut versuchen, wenn du eine stabile Internetverbindung hast, um bisherige Einträge zusammenzuführen, oder direkt fortfahren und verwerfen. Verwerfen bedeutet, dass deine bisherigen Tagebucheinträge dauerhaft verloren gehen und nicht wiederhergestellt werden können.';
 
   @override
-  String get snackRemovePrompt => 'Reflexionsvorschlag entfernt';
+  String get buttonRemovePrompt => 'Schreibanregung entfernen';
 
   @override
-  String get titleShowReflection => 'Reflexionsvorschläge';
+  String get snackRemovePrompt => 'Schreibanregung entfernt';
+
+  @override
+  String get dialogTitleChangeDate => 'Datum';
+
+  @override
+  String get dialogTitleEditText => 'Text';
+
+  @override
+  String get dialogContentDeleteEntry =>
+      'Dein Tagebucheintrag wird dauerhaft gelöscht.';
+
+  @override
+  String get titleShowReflection => 'Schreibanregungen';
 
   @override
   String get subtitleShowReflectionEnabled => 'Fragen und Inspirationen';
 
   @override
-  String get subtitleShowReflectionDisabled => 'Vorschläge aus';
+  String get subtitleShowReflectionDisabled => 'Anregungen aus';
 
   @override
   String get labelShowReflectionEnabled => 'Beginne zu schreiben...';
@@ -48,13 +58,33 @@ class AppLocalizationsDe extends AppLocalizations {
   String get labelShowReflectionDisabled => 'Wofür bist du heute dankbar?';
 
   @override
-  String get titleUseSameColor => 'Gleiche Farbe je Tag';
+  String get titleColorIntensity => 'Farbintensität der Einträge auswählen';
 
   @override
-  String get subtitleUseSameColorEnabled => 'Einträge erhalten Tagesfarbe';
+  String get dialogTitleColorIntensity => 'Farbintensität';
 
   @override
-  String get subtitleUseSameColorDisabled => 'Tagesfarbe aus';
+  String get subtitleColorIntensityVibrant => 'Leuchtende kräftige Farben';
+
+  @override
+  String get subtitleColorIntensityMuted => 'Weiche gedeckte Farben';
+
+  @override
+  String get subtitleColorIntensityGray => 'Neutrale graue Farbe';
+
+  @override
+  String get titleUniqueColor => 'Farbwechsel der Einträge auswählen';
+
+  @override
+  String get dialogTitleUniqueColor => 'Farbwechsel';
+
+  @override
+  String get subtitleUniqueColorDisabled =>
+      'Unterschiedliche Farbe für jeden Eintrag';
+
+  @override
+  String get subtitleUniqueColorEnabled =>
+      'Gleiche Farbe für Einträge des gleichen Tages';
 
   @override
   String get titleRemindMe => 'Erinnerungen';
@@ -68,7 +98,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get subtitleRemindMeDisabled => 'Erinnerungen aus';
 
   @override
-  String get buttonSetDailyTime => 'Zeit einstellen';
+  String get dialogTitleDailyTime => 'Tägliche Zeit';
 
   @override
   String get allowNotificationsAndroid =>

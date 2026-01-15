@@ -22,7 +22,6 @@ class MenuPage extends StatelessWidget {
           actions: const <Widget>[
             if (CorePlatform.isWeb)
               CoreSignOutButton(),
-            SizedBox(width: (CoreTheme.padding *2) -17), // Right spacing correction, resulting in globalPadding*2
           ],
         ),
         body: SafeArea(
@@ -45,7 +44,6 @@ class MenuPage extends StatelessWidget {
                       ),
                       onTap: () {
                         GoRouter.of(context).go('/menu/account');
-                        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_menuPage', parameters: <String, String>{'navigation_menuPage_tap': 'pageAccount'});}
                       },
                     ),
                   ),
@@ -65,7 +63,6 @@ class MenuPage extends StatelessWidget {
                       subtitle: Text(CoreInstance.text.subtitleFaq),
                       onTap: () {
                         coreOpenUrl(url: 'https://www.alphia.io/orare-faq');
-                        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_menuPage', parameters: <String, String>{'navigation_menuPage_tap': 'pageFaq'});}
                       },
                     ),
                   ),
@@ -79,7 +76,6 @@ class MenuPage extends StatelessWidget {
                       subtitle: Text(CoreInstance.text.subtitleContact),
                       onTap: () {
                         coreDraftEmail(subject: CoreInstance.text.draftEmailSubject(service_global.Constant.appName, service_global.Instance.auth.currentUser!.uid.substring(0,6).toUpperCase()), body: CoreInstance.text.draftEmailBody(service_global.Constant.appName));
-                        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_menuPage', parameters: <String, String>{'navigation_menuPage_tap': 'contactSendEmail'});}
                       },
                     ),
                   ),
@@ -93,7 +89,6 @@ class MenuPage extends StatelessWidget {
                       subtitle: Text(CoreInstance.text.subtitleSupportApp),
                       onTap: () {
                         coreOpenUrl(url: 'https://www.alphia.io/orare-support');
-                        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_menuPage', parameters: <String, String>{'navigation_menuPage_tap': 'pageSupport'});}
                       },
                     ),
                   ),
@@ -113,7 +108,6 @@ class MenuPage extends StatelessWidget {
                       subtitle: Text(CoreInstance.text.subtitlePrivacyPolicy),
                       onTap: () {
                         coreOpenUrl(url: 'https://www.alphia.io/orare-datenschutz');
-                        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_menuPage', parameters: <String, String>{'navigation_menuPage_tap': 'pagePrivacyPolicy'});}
                       },
                     ),
                   ),
@@ -127,7 +121,6 @@ class MenuPage extends StatelessWidget {
                       subtitle: Text(CoreInstance.text.subtitleLegalNotice),
                       onTap: () {
                         coreOpenUrl(url: 'https://www.alphia.io/impressum');
-                        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_menuPage', parameters: <String, String>{'navigation_menuPage_tap': 'pageLegalNotice'});}
                       },
                     ),
                   ),
@@ -141,7 +134,6 @@ class MenuPage extends StatelessWidget {
                       subtitle: Text('${CoreInstance.text.subtitleAppVersion} ${service_global.Constant.appVersion}'),
                       onTap: () {
                         GoRouter.of(context).go('/menu/licenses');
-                        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_menuPage', parameters: <String, String>{'navigation_menuPage_tap': 'pageLicenses'});}
                       },
                     ),
                   ),

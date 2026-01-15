@@ -5,4 +5,3 @@ nullable-getter: false
 use-escaping: true
 template-arb-file: app_en.arb
 preferred-supported-locales: [en, en_US, en_UK, de]
-synthetic-package: false

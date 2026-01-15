@@ -3,7 +3,7 @@ import 'dart:math' show min;
 import 'package:alphia_core/alphia_core.dart' show CoreAnimatedSwitcher, CoreBackButton, CoreCredProvider, CoreCredProviderExtension, CoreDivider, CoreInstance, CorePlatform, CoreSelectionArea, CoreShowSnackbar, CoreSignOutButton, CoreTheme, coreDeleteUser, coreShowDialog, coreShowProgressIndicator, coreShowSnackbar, coreSignInUser, coreSignOutUser;
 import 'package:cloud_firestore/cloud_firestore.dart' show SetOptions;
 import 'package:firebase_auth/firebase_auth.dart' show User;
-import 'package:flutter/cupertino.dart' show CupertinoDatePicker, CupertinoDatePickerMode, showCupertinoModalPopup;
+import 'package:flutter/cupertino.dart' show CupertinoDatePicker, CupertinoDatePickerMode, showCupertinoModalPopup, CupertinoButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:go_router/go_router.dart' show GoRouter;
@@ -27,7 +27,6 @@ class AccountPage extends StatelessWidget {
           actions: const <Widget>[
             if (CorePlatform.isWeb)
               CoreSignOutButton(),
-            SizedBox(width: (CoreTheme.padding *2) -17), // Right spacing correction, resulting in globalPadding*2
           ],
         ),
         body: SafeArea(
@@ -56,7 +55,7 @@ class AccountPage extends StatelessWidget {
                             final displayIdentifier = service_global.Concatenate.userEmail(currUser: userListenable);
                             return !service_global.Constant.demoMode
                               ? Center(child: Text(!displayIdentifier.endsWith(service_global.Constant.applePrivateRelayDomain) ? displayIdentifier : service_global.Constant.applePrivateRelayDomain))
-                              : const Center(child: Text('jan.jansen@.com'));
+                              : const Center(child: Text('jan.jansen@example.com'));
                           },
                         ),
                       ),
@@ -102,8 +101,6 @@ class AccountPage extends StatelessWidget {
                                       } else {
                                         // Check if transfer pending
                                         if (!service_global.CrossPlatform.isWeb && (newUser != null)) {await service_global.transferUserDocs(currUser: newUser);}
-                                        // Analytics
-                                        if (!service_global.CrossPlatform.isWeb) {await service_global.Instance.analytics.setAnalyticsCollectionEnabled(true);} // Enable analytics
                                       }
                                       service_global.Instance.crashlytics.log('excavator'); // Reference in case of error
                                       service_global.syncCards();
@@ -115,7 +112,6 @@ class AccountPage extends StatelessWidget {
                                     if (context.mounted) Navigator.of(context).pop(); // Pop progress indicator
                                   }
                                 });
-                                service_global.Instance.analytics.logEvent(name: 'navigation_accountPage', parameters: <String, String>{'navigation_accountPage_tap': 'accountSignUp'});
                               }
                             }
                             else { // CrossPlatform.isWeb
@@ -135,6 +131,112 @@ class AccountPage extends StatelessWidget {
                   ),
                 ),
 
+                // Settings reminder
+                if (service_global.CrossPlatform.isIOS || service_global.CrossPlatform.isAndroid)
+                  Align(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: CoreTheme.maxWidth + (CoreTheme.padding *2)),
+                      child: ValueListenableBuilder<Map<String, dynamic>?>(
+                        valueListenable: service_global.userDocNotifier,
+                        builder: (BuildContext context, Map<String, dynamic>? userDocListenable, Widget? child) {
+                          final reminderIsEnabled = userDocListenable?['settings']?['reminderIsEnabled'] ?? service_global.DefaultSettings.reminderIsEnabled; // False is fallback
+                          final reminderValue = <int>[...(userDocListenable?['settings']?['reminderValue'] ?? service_global.DefaultSettings.reminderValue)]; // 20:00 is fallback
+                          final subtitleText = reminderIsEnabled ? service_global.GlobInstance.text.subtitleRemindMeEnabled('${NumberFormat('00').format(reminderValue[0])}:${NumberFormat('00').format(reminderValue[1])}') : service_global.GlobInstance.text.subtitleRemindMeDisabled;
+                          return SwitchListTile.adaptive(
+                            // leading: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Symbols.notifications_rounded)]),
+                            secondary: Icon(Symbols.notifications_rounded),
+                            title: Text(service_global.GlobInstance.text.titleRemindMe),
+                            subtitle: CoreAnimatedSwitcher(Text(subtitleText, key: ValueKey<String>(subtitleText)), alignment: Alignment.topLeft),
+                            value: reminderIsEnabled,
+                            onChanged: (bool value) {
+                              service_global.Instance.crashlytics.log('giddily'); // Reference in case of error
+                              final currUser = service_global.Instance.auth.currentUser!;
+                              if (!value) {
+                                service_global.Instance.db.collection('users').doc(currUser.uid).set({'settings': {'reminderIsEnabled': value}}, SetOptions(merge: true));
+                              } else {
+                                void setTime(TimeOfDay? selectedTime) {
+                                  if (selectedTime != null) {
+                                    service_global.Instance.db.collection('users').doc(currUser.uid).set({'settings': {'reminderIsEnabled': true, 'reminderValue': <int>[selectedTime.hour, selectedTime.minute]}}, SetOptions(merge: true));
+                                  }
+                                }
+                                if (service_global.CrossPlatform.isIOS) {
+                                  showCupertinoModalPopup<void>(context: context, builder: (BuildContext context) {
+                                    TimeOfDay selectedTime = TimeOfDay(hour: reminderValue[0], minute: reminderValue[1]);
+                                    return SingleChildScrollView( // Avoid overflow error on system text scaling
+                                      child: Container(
+                                        constraints: BoxConstraints(maxWidth: CoreTheme.maxWidth),
+                                        padding: const EdgeInsets.only(top: 6.0),
+                                        margin: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom), // The Bottom margin is provided to align the popup above the system navigation bar
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                          borderRadius: const BorderRadius.vertical(top: Radius.circular(CoreTheme.innerRadius)),
+                                        ),
+                                        child: SafeArea( // Use a SafeArea widget to avoid system overlaps
+                                          top: false,
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              AppBar(
+                                                primary: false, // Exclude status bar height
+                                                backgroundColor: Colors.transparent,
+                                                title: Text(service_global.GlobInstance.text.dialogTitleDailyTime),
+                                                leading: IconButton(
+                                                  icon: const Icon(Icons.close_rounded),
+                                                  tooltip: CoreInstance.text.buttonCancel,
+                                                  onPressed: () {Navigator.maybePop(context);},
+                                                ),
+                                                actions: <Widget>[
+                                                  // Filled Button(
+                                                  //   onPressed: () {Navigator.of(context).pop(); setTime(selectedTime);},
+                                                  //   child: Text(CoreInstance.text.buttonSave),
+                                                  // ),
+                                                  CupertinoButton(
+                                                    onPressed: () {Navigator.of(context).pop(); setTime(selectedTime);},
+                                                    child: Text(CoreInstance.text.buttonSave),
+                                                  ),
+                                                  // const SizedBox(width: CoreTheme.padding),
+                                                ],
+                                              ),
+                                              SizedBox(
+                                                height: min(200, MediaQuery.heightOf(context) * 0.62), // 216 default height for CupertinoDatePicker
+                                                child: CupertinoDatePicker(
+                                                  initialDateTime: DateTime.utc(2050, 1, 1, selectedTime.hour, selectedTime.minute),
+                                                  mode: CupertinoDatePickerMode.time,
+                                                  use24hFormat: true,
+                                                  onDateTimeChanged: (changedTime) {selectedTime = TimeOfDay.fromDateTime(changedTime);},
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  });
+                                } else { // !CrossPlatform.isIOS
+                                  showTimePicker(
+                                    context: context,
+                                    initialTime: TimeOfDay(hour: reminderValue[0], minute: reminderValue[1]),
+                                    helpText: service_global.GlobInstance.text.dialogTitleDailyTime, // Title
+                                    cancelText: CoreInstance.text.buttonCancel, // Necessary to avoid all caps text format 'CANCEL'
+                                    confirmText: CoreInstance.text.buttonSave, // Necessary to avoid all caps text format 'CONFIRM'
+                                    initialEntryMode: TimePickerEntryMode.dialOnly, // Disable keyboard input
+                                    builder: (BuildContext context, Widget? child) {
+                                      return MediaQuery(
+                                        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+                                        child: child!,
+                                      );
+                                    },
+                                  )
+                                  .then((selectedTime) {setTime(selectedTime);});
+                                }
+                              }
+                            },
+                          );
+                        }
+                      ),
+                    ),
+                  ),
+
                 // Settings support questions
                 if (service_global.CrossPlatform.isIOS || service_global.CrossPlatform.isAndroid)
                   Align(
@@ -152,8 +254,9 @@ class AccountPage extends StatelessWidget {
                             value: supportIsEnabled,
                             onChanged: (bool value) {
                               if (!service_global.throttleNotifier.value.isActive) {service_global.throttleNotifier.value.reset();
-                                if (service_global.Instance.auth.currentUser != null) {service_global.Instance.db.collection('users').doc(service_global.Instance.auth.currentUser!.uid).set({'settings': {'supportIsEnabled': !supportIsEnabled}}, SetOptions(merge: true));}
-                                service_global.Instance.analytics.logEvent(name: 'navigation_accountPage', parameters: <String, String>{'navigation_accountPage_tap': 'settingSupport'});
+                                service_global.Instance.crashlytics.log('diligent'); // Reference in case of error
+                                final currUser = service_global.Instance.auth.currentUser!;
+                                service_global.Instance.db.collection('users').doc(currUser.uid).set({'settings': {'supportIsEnabled': !supportIsEnabled}}, SetOptions(merge: true));
                               }
                             }
                           );
@@ -161,6 +264,137 @@ class AccountPage extends StatelessWidget {
                       )
                     )
                   ),
+
+                // Settings color intensity
+                Align(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: CoreTheme.maxWidth + (CoreTheme.padding *2)),
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: service_global.cardColorSchemeNotifier,
+                      builder: (BuildContext context, int cardColorSchemeListenable, Widget? child) {
+                        final colorSchemes = [service_global.GlobInstance.text.subtitleColorIntensityVibrant, service_global.GlobInstance.text.subtitleColorIntensityMuted, service_global.GlobInstance.text.subtitleColorIntensityGray];
+                        final subtitleText = colorSchemes[cardColorSchemeListenable];
+                        final groupValueNotifier = ValueNotifier<int>(service_global.cardColorSchemeNotifier.value);
+                        return ListTile(
+                          leading: Icon(Symbols.brightness_medium_rounded),
+                          title: Text(service_global.GlobInstance.text.titleColorIntensity),
+                          subtitle: CoreAnimatedSwitcher(Text(subtitleText, key: ValueKey<String>(subtitleText)), alignment: Alignment.topLeft),
+                          onTap: () {
+                            void setColorIntensity(int? groupValue) {
+                              service_global.Instance.crashlytics.log('ungreased'); // Reference in case of error
+                              final currUser = service_global.Instance.auth.currentUser!;
+                              if (groupValue != null) {
+                                service_global.Instance.db.collection('users').doc(currUser.uid).set({'settings': {'colorIntensity': groupValue}}, SetOptions(merge: true));
+                              }
+                            }
+                            // if (service_global.CrossPlatform.isIOS) {
+                            if ([TargetPlatform.iOS, TargetPlatform.macOS].contains(Theme.of(CoreInstance.context).platform)) {
+                              showCupertinoModalPopup<void>(context: context, builder: (BuildContext context) {
+                                return SingleChildScrollView( // Avoid overflow error on system text scaling
+                                  child: Container(
+                                    constraints: BoxConstraints(maxWidth: CoreTheme.maxWidth),
+                                    padding: const EdgeInsets.only(top: 6.0),
+                                    margin: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom), // The Bottom margin is provided to align the popup above the system navigation bar
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(CoreTheme.innerRadius)),
+                                    ),
+                                    child: SafeArea( // Use a SafeArea widget to avoid system overlaps
+                                      top: false,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          AppBar(
+                                            primary: false, // Exclude status bar height
+                                            backgroundColor: Colors.transparent,
+                                            title: Text(service_global.GlobInstance.text.dialogTitleColorIntensity),
+                                            leading: IconButton(
+                                              icon: const Icon(Icons.close_rounded),
+                                              tooltip: CoreInstance.text.buttonCancel,
+                                              onPressed: () {Navigator.maybePop(context);},
+                                            ),
+                                            actions: <Widget>[
+                                              // Filled Button(
+                                              //   onPressed: () {Navigator.of(context).pop(); setColorIntensity(groupValueNotifier.value);},
+                                              //   child: Text(CoreInstance.text.buttonSave),
+                                              // ),
+                                              CupertinoButton(
+                                                onPressed: () {Navigator.of(context).pop(); setColorIntensity(groupValueNotifier.value);},
+                                                child: Text(CoreInstance.text.buttonSave),
+                                              ),
+                                              // const SizedBox(width: CoreTheme.padding),
+                                            ],
+                                          ),
+                                          Material(
+                                            color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                            child: ConstrainedBox(
+                                              constraints: const BoxConstraints(maxWidth: CoreTheme.maxWidth + (CoreTheme.padding *2)),
+                                              child: ValueListenableBuilder<int>(
+                                                valueListenable: groupValueNotifier,
+                                                builder: (BuildContext context, int groupValueListenable, Widget? child) {
+                                                  return RadioGroup<int>(
+                                                    groupValue: groupValueListenable,
+                                                    onChanged: (groupValue) {if (groupValue != null) {groupValueNotifier.value = groupValue;}},
+                                                    child: Column(
+                                                      children: [
+                                                        for (final (index, title) in colorSchemes.indexed)
+                                                          RadioListTile.adaptive(
+                                                            title: Text(title),
+                                                            value: index,
+                                                            dense: true,
+                                                            // tileColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                                          ),
+                                                      ]
+                                                    )
+                                                  );
+                                                }
+                                              )
+                                            )
+                                          ),
+                                          SizedBox(height: CoreTheme.padding *2),
+                                        ]
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              });
+                            } else { // !CrossPlatform.isIOS
+                              coreShowDialog(
+                                title: service_global.GlobInstance.text.dialogTitleColorIntensity,
+                                contentWidget: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: CoreTheme.maxWidth + (CoreTheme.padding *2)),
+                                  child: ValueListenableBuilder<int>(
+                                    valueListenable: groupValueNotifier,
+                                    builder: (BuildContext context, int groupValueListenable, Widget? child) {
+                                      return RadioGroup<int>(
+                                        groupValue: groupValueListenable,
+                                        onChanged: (groupValue) {if (groupValue != null) {groupValueNotifier.value = groupValue;}},
+                                        child: Column(
+                                          children: [
+                                            for (final (index, title) in colorSchemes.indexed)
+                                              RadioListTile.adaptive(
+                                                title: Text(title),
+                                                value: index,
+                                                dense: true,
+                                                tileColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                                contentPadding: EdgeInsets.only(right: 16),
+                                              ),
+                                          ]
+                                        )
+                                      );
+                                    }
+                                  )
+                                ),
+                                leftButton: CoreInstance.text.buttonCancel,
+                                rightButton: CoreInstance.text.buttonSave,
+                              ).then((save) {if (save == true) setColorIntensity(groupValueNotifier.value);});
+                            }
+                          },
+                        );
+                      }
+                    ),
+                  ),
+                ),
 
                 // Settings unique color
                 Align(
@@ -170,16 +404,121 @@ class AccountPage extends StatelessWidget {
                       valueListenable: service_global.userDocNotifier,
                       builder: (BuildContext context, Map<String, dynamic>? userDocListenable, Widget? child) {
                         final uniqueColorIsEnabled = userDocListenable?['settings']?['uniqueColorIsEnabled'] ?? service_global.DefaultSettings.uniqueColorIsEnabled; // False is fallback
-                        final subtitleText = uniqueColorIsEnabled ? service_global.GlobInstance.text.subtitleUseSameColorEnabled : service_global.GlobInstance.text.subtitleUseSameColorDisabled;
-                        return SwitchListTile.adaptive(
-                          secondary: Icon(Symbols.invert_colors_rounded),
-                          title: Text(service_global.GlobInstance.text.titleUseSameColor),
+                        final subtitleText = uniqueColorIsEnabled ? service_global.GlobInstance.text.subtitleUniqueColorEnabled : service_global.GlobInstance.text.subtitleUniqueColorDisabled;
+                        final groupValueNotifier = ValueNotifier<int>(uniqueColorIsEnabled ? 1 : 0);
+                        return ListTile(
+                          leading: Icon(Symbols.reset_brightness_rounded),
+                          title: Text(service_global.GlobInstance.text.titleUniqueColor),
                           subtitle: CoreAnimatedSwitcher(Text(subtitleText, key: ValueKey<String>(subtitleText)), alignment: Alignment.topLeft),
-                          value: uniqueColorIsEnabled,
-                          onChanged: (bool value) {
-                            if (!service_global.throttleNotifier.value.isActive) {service_global.throttleNotifier.value.reset();
-                              if (service_global.Instance.auth.currentUser != null) {service_global.Instance.db.collection('users').doc(service_global.Instance.auth.currentUser!.uid).set({'settings': {'uniqueColorIsEnabled': !uniqueColorIsEnabled}}, SetOptions(merge: true));}
-                              if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_accountPage', parameters: <String, String>{'navigation_accountPage_tap': 'settingUniqueColor'});}
+                          onTap: () {
+                            void setColorChange(int? groupValue) {
+                              service_global.Instance.crashlytics.log('drapery'); // Reference in case of error
+                              final currUser = service_global.Instance.auth.currentUser!;
+                              if (groupValue != null) {
+                                service_global.Instance.db.collection('users').doc(currUser.uid).set({'settings': {'uniqueColorIsEnabled': (groupValue == 1) ? true : false}}, SetOptions(merge: true));
+                              }
+                            }
+                            // if (service_global.CrossPlatform.isIOS) {
+                            if ([TargetPlatform.iOS, TargetPlatform.macOS].contains(Theme.of(CoreInstance.context).platform)) {
+                              showCupertinoModalPopup<void>(context: context, builder: (BuildContext context) {
+                                return SingleChildScrollView( // Avoid overflow error on system text scaling
+                                  child: Container(
+                                    constraints: BoxConstraints(maxWidth: CoreTheme.maxWidth),
+                                    padding: const EdgeInsets.only(top: 6.0),
+                                    margin: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom), // The Bottom margin is provided to align the popup above the system navigation bar
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(CoreTheme.innerRadius)),
+                                    ),
+                                    child: SafeArea( // Use a SafeArea widget to avoid system overlaps
+                                      top: false,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          AppBar(
+                                            primary: false, // Exclude status bar height
+                                            backgroundColor: Colors.transparent,
+                                            title: Text(service_global.GlobInstance.text.dialogTitleUniqueColor),
+                                            leading: IconButton(
+                                              icon: const Icon(Icons.close_rounded),
+                                              tooltip: CoreInstance.text.buttonCancel,
+                                              onPressed: () {Navigator.maybePop(context);},
+                                            ),
+                                            actions: <Widget>[
+                                              // Filled Button(
+                                              //   onPressed: () {Navigator.of(context).pop(); setColorChange(groupValueNotifier.value);},
+                                              //   child: Text(CoreInstance.text.buttonSave),
+                                              // ),
+                                              CupertinoButton(
+                                                onPressed: () {Navigator.of(context).pop(); setColorChange(groupValueNotifier.value);},
+                                                child: Text(CoreInstance.text.buttonSave),
+                                              ),
+                                              // const SizedBox(width: CoreTheme.padding),
+                                            ],
+                                          ),
+                                          Material(
+                                            color: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                            child: ConstrainedBox(
+                                              constraints: const BoxConstraints(maxWidth: CoreTheme.maxWidth + (CoreTheme.padding *2)),
+                                              child: ValueListenableBuilder<int>(
+                                                valueListenable: groupValueNotifier,
+                                                builder: (BuildContext context, int groupValueListenable, Widget? child) {
+                                                  return RadioGroup<int>(
+                                                    groupValue: groupValueListenable,
+                                                    onChanged: (groupValue) {if (groupValue != null) {groupValueNotifier.value = groupValue;}},
+                                                    child: Column(
+                                                      children: [
+                                                        for (final (index, title) in [service_global.GlobInstance.text.subtitleUniqueColorDisabled, service_global.GlobInstance.text.subtitleUniqueColorEnabled].indexed)
+                                                          RadioListTile.adaptive(
+                                                            title: Text(title),
+                                                            value: index,
+                                                            dense: true,
+                                                            // tileColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                                          ),
+                                                      ]
+                                                    )
+                                                  );
+                                                }
+                                              )
+                                            )
+                                          ),
+                                          SizedBox(height: CoreTheme.padding *2),
+                                        ]
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              });
+                            } else { // !CrossPlatform.isIOS
+                              coreShowDialog(
+                                title: service_global.GlobInstance.text.dialogTitleUniqueColor,
+                                contentWidget: ConstrainedBox(
+                                  constraints: const BoxConstraints(maxWidth: CoreTheme.maxWidth + (CoreTheme.padding *2)),
+                                  child: ValueListenableBuilder<int>(
+                                    valueListenable: groupValueNotifier,
+                                    builder: (BuildContext context, int groupValueListenable, Widget? child) {
+                                      return RadioGroup<int>(
+                                        groupValue: groupValueListenable,
+                                        onChanged: (groupValue) {if (groupValue != null) {groupValueNotifier.value = groupValue;}},
+                                        child: Column(
+                                          children: [
+                                            for (final (index, title) in [service_global.GlobInstance.text.subtitleUniqueColorDisabled, service_global.GlobInstance.text.subtitleUniqueColorEnabled].indexed)
+                                              RadioListTile.adaptive(
+                                                title: Text(title),
+                                                value: index,
+                                                dense: true,
+                                                tileColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                                                contentPadding: EdgeInsets.only(right: 16),
+                                              ),
+                                          ]
+                                        )
+                                      );
+                                    }
+                                  )
+                                ),
+                                leftButton: CoreInstance.text.buttonCancel,
+                                rightButton: CoreInstance.text.buttonSave,
+                              ).then((save) {if (save == true) setColorChange(groupValueNotifier.value);});
                             }
                           },
                         );
@@ -187,123 +526,6 @@ class AccountPage extends StatelessWidget {
                     ),
                   ),
                 ),
-
-                // Settings reminder
-                if (service_global.CrossPlatform.isIOS || service_global.CrossPlatform.isAndroid)
-                  Align(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: CoreTheme.maxWidth + (CoreTheme.padding *2)),
-                      child: ValueListenableBuilder<Map<String, dynamic>?>(
-                        valueListenable: service_global.userDocNotifier,
-                        builder: (BuildContext context, Map<String, dynamic>? userDocListenable, Widget? child) {
-                          final reminderIsEnabled = userDocListenable?['settings']?['reminderIsEnabled'] ?? service_global.DefaultSettings.reminderIsEnabled; // False is fallback
-                          final reminderValue = <int>[...(userDocListenable?['settings']?['reminderValue'] ?? service_global.DefaultSettings.reminderValue)]; // 20:00 is fallback
-                          final subtitleText = reminderIsEnabled ? service_global.GlobInstance.text.subtitleRemindMeEnabled('${NumberFormat('00').format(reminderValue[0])}:${NumberFormat('00').format(reminderValue[1])}') : service_global.GlobInstance.text.subtitleRemindMeDisabled;
-                          return ListTile(
-                            leading: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Symbols.notifications_rounded)]),
-                            title: Text(service_global.GlobInstance.text.titleRemindMe),
-                            subtitle: CoreAnimatedSwitcher(Text(subtitleText, key: ValueKey<String>(subtitleText)), alignment: Alignment.topLeft),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: <Widget>[
-                                const CoreDivider(vertical: true),
-                                Switch.adaptive(
-                                  value: reminderIsEnabled,
-                                  onChanged: (bool value) {
-                                    if (!service_global.throttleNotifier.value.isActive) {service_global.throttleNotifier.value.reset();
-                                      if (service_global.Instance.auth.currentUser != null) {service_global.Instance.db.collection('users').doc(service_global.Instance.auth.currentUser!.uid).set({'settings': {'reminderIsEnabled': value}}, SetOptions(merge: true));}
-                                      service_global.Instance.analytics.logEvent(name: 'navigation_accountPage', parameters: <String, String>{'navigation_accountPage_tap': 'settingReminderSwitch'});
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                            onTap: () {
-                              void setTime(TimeOfDay? selectedTime) {
-                                if ((selectedTime != null) && (service_global.Instance.auth.currentUser != null)) {
-                                  service_global.Instance.db.collection('users').doc(service_global.Instance.auth.currentUser!.uid).set({'settings': {'reminderIsEnabled': true, 'reminderValue': <int>[selectedTime.hour, selectedTime.minute]}}, SetOptions(merge: true));
-                                  service_global.Instance.analytics.logEvent(
-                                    name: 'setting_reminder',
-                                    parameters: <String, String>{ // Analytics requires String to prevent (not set) error value
-                                      'setting_reminder_timeHour': selectedTime.hour.toString(),
-                                      'setting_reminder_timeMinute': selectedTime.minute.toString(),
-                                      'setting_reminder_timeHourMinute': '${selectedTime.hour}:${selectedTime.minute}',
-                                    },
-                                  );
-                                }
-                              }
-                              if (service_global.CrossPlatform.isIOS) {
-                                showCupertinoModalPopup<void>(context: context, builder: (BuildContext context) {
-                                  TimeOfDay selectedTime = TimeOfDay(hour: reminderValue[0], minute: reminderValue[1]);
-                                  return SingleChildScrollView( // Avoid overflow error on system text scaling
-                                    child: Container(
-                                      padding: const EdgeInsets.only(top: 6.0),
-                                      margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom), // The Bottom margin is provided to align the popup above the system navigation bar
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                                        borderRadius: const BorderRadius.vertical(top: Radius.circular(CoreTheme.innerRadius)),
-                                      ),
-                                      child: SafeArea( // Use a SafeArea widget to avoid system overlaps
-                                        top: false,
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            AppBar(
-                                              primary: false, // Exclude status bar height
-                                              backgroundColor: Colors.transparent,
-                                              title: Text(service_global.GlobInstance.text.buttonSetDailyTime),
-                                              leading: IconButton(
-                                                icon: const Icon(Icons.close_rounded),
-                                                tooltip: CoreInstance.text.buttonCancel,
-                                                onPressed: () {Navigator.maybePop(context);},
-                                              ),
-                                              actions: <Widget>[
-                                                TextButton(
-                                                  onPressed: () {Navigator.of(context).pop(); setTime(selectedTime);}, // editedText is really a new text
-                                                  child: Text(CoreInstance.text.buttonSave),
-                                                ),
-                                                SizedBox(width: (CoreTheme.padding *2) -17), // Right spacing correction, resulting in globalPadding*2
-                                              ],
-                                            ),
-                                            SizedBox(
-                                              height: min(200, MediaQuery.of(context).size.height * 0.62), // 216 default height for CupertinoDatePicker
-                                              child: CupertinoDatePicker(
-                                                initialDateTime: DateTime.utc(2050, 1, 1, selectedTime.hour, selectedTime.minute),
-                                                mode: CupertinoDatePickerMode.time,
-                                                use24hFormat: true,
-                                                onDateTimeChanged: (changedTime) {selectedTime = TimeOfDay.fromDateTime(changedTime);},
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                });
-                              } else { // !CrossPlatform.isIOS
-                                showTimePicker(
-                                  context: context,
-                                  initialTime: TimeOfDay(hour: reminderValue[0], minute: reminderValue[1]),
-                                  helpText: service_global.GlobInstance.text.buttonSetDailyTime, // Title
-                                  cancelText: CoreInstance.text.buttonCancel, // Necessary to avoid all caps text format 'CANCEL'
-                                  confirmText: CoreInstance.text.buttonSave, // Necessary to avoid all caps text format 'CONFIRM'
-                                  initialEntryMode: TimePickerEntryMode.dialOnly, // Disable keyboard input
-                                  builder: (BuildContext context, Widget? child) {
-                                    return MediaQuery(
-                                      data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-                                      child: child!,
-                                    );
-                                  },
-                                )
-                                .then((selectedTime) {setTime(selectedTime);});
-                              }
-                              service_global.Instance.analytics.logEvent(name: 'navigation_accountPage', parameters: <String, String>{'navigation_accountPage_tap': 'settingReminder'});
-                            },
-                          );
-                        }
-                      ),
-                    ),
-                  ),
 
                 Align(
                   child: ConstrainedBox(
@@ -320,12 +542,11 @@ class AccountPage extends StatelessWidget {
                       child: CustomFadeInAnimation(
                         firstChild: const SizedBox(width: double.infinity, height: 0),
                         secondChild: ListTile(
-                          leading: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Symbols.refresh_rounded)]),
+                          leading: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Symbols.add_notes_rounded)]),
                           title: Text(CoreInstance.text.titleUpdatePersonal),
                           subtitle: Text(CoreInstance.text.subtitleUpdatePersonal),
                           onTap: () {
                             GoRouter.of(context).go('/menu/account/update');
-                            service_global.Instance.analytics.logEvent(name: 'navigation_accountPage', parameters: <String, String>{'navigation_accountPage_tap': 'accountTransfer'});
                           },
                         ),
                       ),
@@ -349,7 +570,7 @@ class AccountPage extends StatelessWidget {
                       onTap: () async {
                         coreShowDialog(
                           title: CoreInstance.text.dialogTitleExport,
-                          content: CoreInstance.text.dialogContentExportPersonal((service_global.Instance.auth.currentUser?.isAnonymous ?? true).toString(), service_global.Concatenate.userEmail()),
+                          content: CoreInstance.text.dialogContentExportPersonal,
                           leftButton: CoreInstance.text.buttonCancel,
                           rightButton: CoreInstance.text.buttonExport,
                           hasTimer: true,
@@ -358,7 +579,6 @@ class AccountPage extends StatelessWidget {
                             coreShowProgressIndicator();
                             service_global.exportAccountData().then((_) {if (context.mounted) Navigator.of(context).pop();}); // Pop progress indicator
                           }});
-                        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_accountPage', parameters: <String, String>{'navigation_accountPage_tap': 'accountExport'});}
                       },
                     ),
                   ),
@@ -399,7 +619,6 @@ class AccountPage extends StatelessWidget {
                               }
                             });
                           }});
-                        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_accountPage', parameters: <String, String>{'navigation_accountPage_tap': 'accountDelete'});}
                       },
                     ),
                   ),
@@ -445,7 +664,6 @@ class AccountPage extends StatelessWidget {
                                   }
                                 });
                               }});
-                            if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(name: 'navigation_accountPage', parameters: <String, String>{'navigation_accountPage_tap': 'accountSignOut'});}
                           },
                         ),
                       ),

@@ -1,7 +1,7 @@
 // Copyright 2023 Alphia GmbH
 import 'dart:math' show min;
-import 'package:alphia_core/alphia_core.dart' show CoreInstance, CorePlatform, CoreSelectionArea, CoreTheme, coreShowSnackbar, coreSignOutUser;
-import 'package:flutter/cupertino.dart' show CupertinoDatePicker, CupertinoDatePickerMode, DatePickerDateOrder, showCupertinoModalPopup;
+import 'package:alphia_core/alphia_core.dart' show CoreInstance, CorePlatform, CoreSelectionArea, CoreTheme, coreShowDialog, coreShowSnackbar, coreSignOutUser;
+import 'package:flutter/cupertino.dart' show CupertinoDatePicker, CupertinoDatePickerMode, DatePickerDateOrder, showCupertinoModalPopup, CupertinoButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:material_symbols_icons/symbols.dart' show Symbols;
@@ -18,7 +18,7 @@ class CardPage extends StatefulWidget {
   State<CardPage> createState() => _CardPageState();
 }
 class _CardPageState extends State<CardPage> {
-  Brightness _systemBarBrightState = (Theme.of(service_global.Instance.navigatorKey.currentState!.context).colorScheme.brightness == Brightness.light) ? Brightness.dark : Brightness.light; // On animation keep system status bar icon brightness as colorScheme
+  Brightness _systemBarBrightState = Theme.of(service_global.Instance.navigatorKey.currentState!.context).colorScheme.brightness; // On animation keep system status bar icon brightness as colorScheme
   double _appBarOpacityState = 0;
   int numOfMatchingHeros = 0;
 
@@ -33,7 +33,7 @@ class _CardPageState extends State<CardPage> {
       }
       CoreInstance.context.visitChildElements(incrementNumOfMatchingHeros);
       if (numOfMatchingHeros != 2) {
-        _systemBarBrightState = ThemeData.estimateBrightnessForColor(widget.entry.onColor()); // On completion switch system status bar icon brightness to onColor
+        _systemBarBrightState = widget.entry.brightness; // On completion switch system status bar icon brightness to onColor
         _appBarOpacityState = 1; // On completion show app bar icons on destination page
         setState(() {});
       }
@@ -50,23 +50,24 @@ class _CardPageState extends State<CardPage> {
         extendBodyBehindAppBar: true,
         appBar: AppBar(
           systemOverlayStyle: SystemUiOverlayStyle( // On animation keep system status bar icon brightness as colorScheme // On completion switch system status bar icon brightness to onColor // On reverse switch back system status bar icon brightness to colorScheme
-            statusBarIconBrightness: _systemBarBrightState, // System status bar icon brightness state Android
-            statusBarBrightness: (_systemBarBrightState == Brightness.light) ? Brightness.dark : Brightness.light, // System status bar icon brightness state iOS
+            statusBarIconBrightness: (_systemBarBrightState == Brightness.light) ? Brightness.dark : Brightness.light, // System status bar icon brightness state Android
+            statusBarBrightness: _systemBarBrightState, // System status bar icon brightness state iOS
           ),
-          toolbarOpacity: _appBarOpacityState, // App bar icon opacity state
+          // toolbarOpacity: _appBarOpacityState, // App bar icon opacity state
           backgroundColor: Colors.transparent,
-          leading: IconButton(
+          automaticallyImplyLeading: false,
+          leading: (_appBarOpacityState == 0) ? null : IconButton(
             icon: const Icon(Icons.close_rounded),
-            color: entry.onColor(),
+            color: entry.onSurface,
             tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
             onPressed: () {
               if (numOfMatchingHeros != 2) {
-                setState(() {_systemBarBrightState = (Theme.of(context).colorScheme.brightness == Brightness.light) ? Brightness.dark : Brightness.light; _appBarOpacityState = 0;});
+                setState(() {_systemBarBrightState = Theme.of(context).colorScheme.brightness; _appBarOpacityState = 0;});
               }
               Navigator.maybePop(context);
             },
           ),
-          actions: <Widget>[
+          actions: (_appBarOpacityState == 0) ? null : <Widget>[
             // IconButton(
             //   icon: const Icon(Symbols.content_copy_rounded),
             //   visualDensity: VisualDensity.comfortable,
@@ -88,9 +89,9 @@ class _CardPageState extends State<CardPage> {
             // ),
             if (entry.prompt != null)
               IconButton(
-                icon: const Icon(Symbols.chat_error_rounded),
-                visualDensity: VisualDensity.comfortable,
-                color: entry.onColor(),
+                icon: const Icon(Symbols.chat_error_rounded, fill: 1),
+                // visualDensity: VisualDensity.comfortable,
+                color: entry.onSurfaceVariant,
                 tooltip: service_global.GlobInstance.text.buttonRemovePrompt,
                 onPressed: () {
                   Navigator.of(context).pop();
@@ -100,9 +101,9 @@ class _CardPageState extends State<CardPage> {
                 },
               ),
             IconButton(
-              icon: const Icon(Symbols.edit_calendar_rounded),
-              visualDensity: VisualDensity.comfortable,
-              color: entry.onColor(),
+              icon: const Icon(Symbols.edit_calendar_rounded, fill: 1),
+              // visualDensity: VisualDensity.comfortable,
+              color: entry.onSurfaceVariant,
               tooltip: CoreInstance.text.buttonEditDate,
               onPressed:  () {
                 void setDate(DateTime selectedDate) {
@@ -113,13 +114,15 @@ class _CardPageState extends State<CardPage> {
                     });
                   }
                 }
-                if (service_global.CrossPlatform.isIOS) {
+                // if (service_global.CrossPlatform.isIOS) {
+                if ([TargetPlatform.iOS, TargetPlatform.macOS].contains(Theme.of(CoreInstance.context).platform)) {
                   showCupertinoModalPopup<void>(context: context, builder: (BuildContext context) {
                     DateTime selectedDate = DateUtils.dateOnly(entry.timeCreated);
                     return SingleChildScrollView( // Avoid overflow error on system text scaling
                       child: Container(
+                        constraints: BoxConstraints(maxWidth: CoreTheme.maxWidth),
                         padding: const EdgeInsets.only(top: 6.0),
-                        margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom), // The Bottom margin is provided to align the popup above the system navigation bar
+                        margin: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom), // The Bottom margin is provided to align the popup above the system navigation bar
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.surfaceContainerHigh,
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(CoreTheme.innerRadius)),
@@ -132,22 +135,26 @@ class _CardPageState extends State<CardPage> {
                               AppBar(
                                 primary: false, // Exclude status bar height
                                 backgroundColor: Colors.transparent,
-                                title: Text(CoreInstance.text.buttonEditDate),
+                                title: Text(service_global.GlobInstance.text.dialogTitleChangeDate),
                                 leading: IconButton(
                                   icon: const Icon(Icons.close_rounded),
                                   tooltip: CoreInstance.text.buttonCancel,
                                   onPressed: () {Navigator.maybePop(context);},
                                 ),
                                 actions: <Widget>[
-                                  TextButton(
-                                    onPressed: () {Navigator.of(context).pop(); setDate(selectedDate);}, // editedText is really a new text
+                                  // Filled Button(
+                                  //   onPressed: () {Navigator.of(context).pop(); setDate(selectedDate);},
+                                  //   child: Text(CoreInstance.text.buttonSave),
+                                  // ),
+                                  CupertinoButton(
+                                    onPressed: () {Navigator.of(context).pop(); setDate(selectedDate);},
                                     child: Text(CoreInstance.text.buttonSave),
                                   ),
-                                  SizedBox(width: (CoreTheme.padding *2) -17), // Right spacing correction, resulting in globalPadding*2
+                                  // const SizedBox(width: CoreTheme.padding),
                                 ],
                               ),
                               SizedBox(
-                                height: min(200, MediaQuery.of(context).size.height * 0.62), // 216 default height for CupertinoDatePicker
+                                height: min(200, MediaQuery.heightOf(context) * 0.62), // 216 default height for CupertinoDatePicker
                                 child: CupertinoDatePicker(
                                   initialDateTime: selectedDate,
                                   mode: CupertinoDatePickerMode.date,
@@ -171,7 +178,7 @@ class _CardPageState extends State<CardPage> {
                     initialDate: entry.timeCreated, // Preselected date
                     firstDate: DateTime(1984),
                     lastDate: DateTime(2049),
-                    helpText: CoreInstance.text.buttonEditDate, // Title
+                    helpText: service_global.GlobInstance.text.dialogTitleChangeDate, // Title
                     cancelText: CoreInstance.text.buttonCancel, // Necessary to avoid all caps text format 'CANCEL'
                     confirmText: CoreInstance.text.buttonSave, // Necessary to avoid all caps text format 'CONFIRM'
                     initialEntryMode: DatePickerEntryMode.calendarOnly, // Disable keyboard input
@@ -181,9 +188,9 @@ class _CardPageState extends State<CardPage> {
               },
             ),
             IconButton(
-              icon: Icon(Symbols.edit_document_rounded),
-              visualDensity: VisualDensity.comfortable,
-              color: entry.onColor(),
+              icon: Icon(Symbols.edit_document_rounded, fill: 1),
+              // visualDensity: VisualDensity.comfortable,
+              color: entry.onSurfaceVariant,
               tooltip: CoreInstance.text.buttonEditText,
               onPressed: () {
                 service_global.showTextEditDialog(content: entry.text)
@@ -199,27 +206,40 @@ class _CardPageState extends State<CardPage> {
               },
             ),
             IconButton(
-              icon: const Icon(Symbols.delete_rounded),
-              color: entry.onColor(),
+              icon: const Icon(Symbols.delete_rounded, fill: 1),
+              color: entry.onSurfaceVariant,
               tooltip: CoreInstance.text.buttonDelete,
-              onPressed:  () {Navigator.of(context).pop(); Future.delayed(service_global.Constant.animationDuration*1.1, () {service_global.deleteCard(entry: entry);});}, // Synchronized with page transition duration
+              onPressed:  () {
+                coreShowDialog(
+                  title: CoreInstance.text.dialogTitleDelete,
+                  content: service_global.GlobInstance.text.dialogContentDeleteEntry,
+                  leftButton: CoreInstance.text.buttonCancel,
+                  rightButton: CoreInstance.text.buttonDelete,
+                  isError: true)
+                  .then((rightButtonPressed) {if (rightButtonPressed ?? false) {
+                    if (context.mounted) Navigator.of(context).pop();
+                    Future.delayed(service_global.Constant.animationDuration*1.1, () {service_global.deleteCard(entry: entry);}); // Synchronized with page transition duration
+                  }});
+                },
             ),
+            SizedBox(width: 4),
+
             if (CorePlatform.isWeb)
-              const SizedBox(width: service_global.Constant.padding *2),
-            if (CorePlatform.isWeb)
-              IconButton(
-                icon: const Icon(Symbols.logout_rounded),
-                color: entry.onColor(),
-                tooltip: CoreInstance.text.buttonSignOut,
-                onPressed:  () async {
-                  final signedOut = await coreSignOutUser();
-                  if (signedOut) {
-                    if (context.mounted) Navigator.of(context).pop(); // Pop card page
-                    coreShowSnackbar(content: CoreInstance.text.snackSignedOut, clearSnackbars: true);
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: IconButton(
+                  icon: const Icon(Symbols.logout_rounded),
+                  color: entry.onSurfaceVariant,
+                  tooltip: CoreInstance.text.buttonSignOut,
+                  onPressed:  () async {
+                    final signedOut = await coreSignOutUser();
+                    if (signedOut) {
+                      if (context.mounted) Navigator.of(context).pop(); // Pop card page
+                      coreShowSnackbar(content: CoreInstance.text.snackSignedOut, clearSnackbars: true);
+                    }
                   }
-                }
+                )
               ),
-            const SizedBox(width: (service_global.Constant.padding*2)-17), // Right spacing correction, resulting in globalPadding*2
           ],
         ),
         body:
@@ -233,7 +253,7 @@ class _CardPageState extends State<CardPage> {
             onVerticalDragUpdate: (details) {
               if (details.delta.dy > 8) { // Sensitivity 8
                 if (numOfMatchingHeros != 2) {
-                  setState(() {_systemBarBrightState = (Theme.of(context).colorScheme.brightness == Brightness.light) ? Brightness.dark : Brightness.light; _appBarOpacityState = 0;});
+                  setState(() {_systemBarBrightState = Theme.of(context).colorScheme.brightness; _appBarOpacityState = 0;});
                 }
                 Navigator.of(context).pop();
               }
@@ -252,13 +272,13 @@ class _CardPageState extends State<CardPage> {
                   if (status == AnimationStatus.completed) {
                     // setState(() {_systemBarBrightState = ThemeData.estimateBrightnessForColor(entry.onColor());}); // On completion switch system status bar icon brightness to onColor
                     // setState(() {_appBarOpacityState = 1;}); // On completion show app bar icons on destination page
-                    setState(() {_systemBarBrightState = ThemeData.estimateBrightnessForColor(entry.onColor()); _appBarOpacityState = 1;});
+                    setState(() {_systemBarBrightState = entry.brightness; _appBarOpacityState = 1;});
                     animation.removeStatusListener((status) { });
                   }
                   if (status == AnimationStatus.reverse) {
                     // setState(() {_systemBarBrightState = (Theme.of(context).colorScheme.brightness == Brightness.light) ? Brightness.dark : Brightness.light;}); // On reverse switch back system status bar icon brightness to colorScheme
-                    // setState(() {_appBarOpacityState = 0;}); // On reverse hide app bar icons on destination page
-                    setState(() {_systemBarBrightState = (Theme.of(context).colorScheme.brightness == Brightness.light) ? Brightness.dark : Brightness.light; _appBarOpacityState = 0;});
+                    // setState(() {_appBarOpacityState = 0;});
+                    setState(() {_systemBarBrightState = Theme.of(context).colorScheme.brightness; _appBarOpacityState = 0;});
                     animation.removeStatusListener((status) { });
                   }
                 });

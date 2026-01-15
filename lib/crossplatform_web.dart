@@ -19,3 +19,10 @@ class CustomCrashlyticsInstance { // Do nothing on web version
 }
 // Exclude analytics from web version
 const firebaseAnalyticsInstance = null;
+
+Null crossDirectory(String path) {
+  return null;
+}
+Future<Null> crossFile(String path, List<int> bytes) async {
+  return await null;
+}

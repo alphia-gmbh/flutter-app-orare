@@ -7,7 +7,7 @@ We’re sharing this app as part of our commitment to transparency, mindful desi
 ## Main Features
 - Capture thoughts and moments in seconds with a clean, distraction-free interface designed for speed and simplicity
 - Built-in prompts and customizable reminders help you build a consistent habit of reflection and gratitude
-- Your journal entries are safely synced and backed, so your memories are always protected and available across devices
+- Your journal entries are safely synced and backed up, so your memories are always protected and available across devices
 - And many more
 
 ## Ready to Use

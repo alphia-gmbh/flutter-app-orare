@@ -63,7 +63,7 @@ import 'app_localizations_en.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,18 +86,18 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
     Locale('en', 'US'),
     Locale('en', 'UK'),
-    Locale('de')
+    Locale('de'),
   ];
 
   /// No description provided for @claimOrare.
@@ -111,12 +111,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Boost your happiness and mindfulness by daily gratitude journaling. Just start writing down what you are grateful for and why :)'**
   String get onboardingHint;
-
-  /// No description provided for @buttonRemovePrompt.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove reflection prompt'**
-  String get buttonRemovePrompt;
 
   /// No description provided for @buttonStreak.
   ///
@@ -136,16 +130,40 @@ abstract class AppLocalizations {
   /// **'While moving your journal entries to your new account, a temporary glitch occurred.\n\nYou can either try the transfer again with a stable internet connection to merge previous entries or proceed by discarding. Discarding means your earlier journaling content will be permanently lost and cannot be restored.'**
   String get dialogContentDiscardJournal;
 
+  /// No description provided for @buttonRemovePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove journaling prompt'**
+  String get buttonRemovePrompt;
+
   /// No description provided for @snackRemovePrompt.
   ///
   /// In en, this message translates to:
-  /// **'Reflection prompt removed'**
+  /// **'Journaling prompt removed'**
   String get snackRemovePrompt;
+
+  /// No description provided for @dialogTitleChangeDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get dialogTitleChangeDate;
+
+  /// No description provided for @dialogTitleEditText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get dialogTitleEditText;
+
+  /// No description provided for @dialogContentDeleteEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Your journal entry will be deleted permanently.'**
+  String get dialogContentDeleteEntry;
 
   /// No description provided for @titleShowReflection.
   ///
   /// In en, this message translates to:
-  /// **'Show reflection prompts'**
+  /// **'Show journaling prompts'**
   String get titleShowReflection;
 
   /// No description provided for @subtitleShowReflectionEnabled.
@@ -172,23 +190,59 @@ abstract class AppLocalizations {
   /// **'What are you grateful for today?'**
   String get labelShowReflectionDisabled;
 
-  /// No description provided for @titleUseSameColor.
+  /// No description provided for @titleColorIntensity.
   ///
   /// In en, this message translates to:
-  /// **'Use same color each day'**
-  String get titleUseSameColor;
+  /// **'Choose color intensity of entries'**
+  String get titleColorIntensity;
 
-  /// No description provided for @subtitleUseSameColorEnabled.
+  /// No description provided for @dialogTitleColorIntensity.
   ///
   /// In en, this message translates to:
-  /// **'Same-day entries share color'**
-  String get subtitleUseSameColorEnabled;
+  /// **'Color intensity'**
+  String get dialogTitleColorIntensity;
 
-  /// No description provided for @subtitleUseSameColorDisabled.
+  /// No description provided for @subtitleColorIntensityVibrant.
   ///
   /// In en, this message translates to:
-  /// **'Daily color off'**
-  String get subtitleUseSameColorDisabled;
+  /// **'Bright vibrant colors'**
+  String get subtitleColorIntensityVibrant;
+
+  /// No description provided for @subtitleColorIntensityMuted.
+  ///
+  /// In en, this message translates to:
+  /// **'Soft muted colors'**
+  String get subtitleColorIntensityMuted;
+
+  /// No description provided for @subtitleColorIntensityGray.
+  ///
+  /// In en, this message translates to:
+  /// **'Neutral gray color'**
+  String get subtitleColorIntensityGray;
+
+  /// No description provided for @titleUniqueColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose color change of entries'**
+  String get titleUniqueColor;
+
+  /// No description provided for @dialogTitleUniqueColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Color change'**
+  String get dialogTitleUniqueColor;
+
+  /// No description provided for @subtitleUniqueColorDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Different color for each entry'**
+  String get subtitleUniqueColorDisabled;
+
+  /// No description provided for @subtitleUniqueColorEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Same color for entries of the same day'**
+  String get subtitleUniqueColorEnabled;
 
   /// No description provided for @titleRemindMe.
   ///
@@ -208,11 +262,11 @@ abstract class AppLocalizations {
   /// **'Reminder off'**
   String get subtitleRemindMeDisabled;
 
-  /// No description provided for @buttonSetDailyTime.
+  /// No description provided for @dialogTitleDailyTime.
   ///
   /// In en, this message translates to:
-  /// **'Set daily time'**
-  String get buttonSetDailyTime;
+  /// **'Daily time'**
+  String get dialogTitleDailyTime;
 
   /// No description provided for @allowNotificationsAndroid.
   ///
@@ -320,8 +374,9 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   }
 
   throw FlutterError(
-      'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

@@ -23,16 +23,6 @@ Future<void> initNotification() async { // On notification tap when app was term
       service_global.notificationNotifier.value = payload.split('::').last; // Init supporting question by notification payload
     });
     Future.delayed(service_global.Constant.animationDuration*6, () {service_global.Instance.focusNode.requestFocus();}); // Focus on input field
-    service_global.Instance.analytics.logEvent( // if (!service_global.CrossPlatform.isWeb) {
-      name: 'notification',
-      parameters: <String, String>{ // Analytics requires String to prevent (not set) error value
-        'notification_title': payload.split('::').first,
-        'notification_body': payload.split('::').last,
-        'notification_timeHour': DateTime.now().hour.toString(), // Hour of day
-        'notification_timeWeekday': DateTime.now().weekday.toString(),
-        'notification_platform': service_global.CrossPlatform.operatingSystem,
-      },
-    );
   }
   else { // App is not launched by notification
     Future.delayed(service_global.Constant.animationDuration*3, () { // Staggered animation with supporting question coming last
@@ -62,16 +52,6 @@ Future<void> refreshNotification() async {
             if ((payload != null) && (payload.split('::').length == 2)) {
               service_global.notificationNotifier.value = payload.split('::').last; // Init supporting question by notification payload
               Future.delayed(service_global.Constant.animationDuration*2, () {service_global.Instance.focusNode.requestFocus();}); // Focus on input field
-              service_global.Instance.analytics.logEvent( // if (!service_global.CrossPlatform.isWeb) {
-                name: 'notification',
-                parameters: <String, String>{ // Analytics requires String to prevent (not set) error value
-                  'notification_title': payload.split('::').first,
-                  'notification_body': payload.split('::').last,
-                  'notification_timeHour': DateTime.now().hour.toString(), // Hour of day
-                  'notification_timeWeekday': DateTime.now().weekday.toString(),
-                  'notification_platform': service_global.CrossPlatform.operatingSystem,
-                },
-              );
             }
           },
         );

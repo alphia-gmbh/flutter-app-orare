@@ -1,7 +1,7 @@
 // Copyright 2023 Alphia GmbH
 import 'dart:isolate' show Isolate, RawReceivePort;
 import 'package:alphia_core/alphia_core.dart' show CoreAppLocalizations, CoreInstance, CorePlatform, CoreTheme;
-import 'package:firebase_app_check/firebase_app_check.dart' show AndroidProvider, AppleProvider, FirebaseAppCheck;
+import 'package:firebase_app_check/firebase_app_check.dart' show AndroidDebugProvider, AndroidPlayIntegrityProvider, AppleDebugProvider, AppleAppAttestProvider, FirebaseAppCheck;
 import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth, Persistence;
 import 'package:firebase_core/firebase_core.dart' show Firebase;
 import 'package:flutter/foundation.dart' show FlutterError, PlatformDispatcher, kDebugMode, kReleaseMode;
@@ -42,8 +42,8 @@ void main() async {
 
   // Initialize Firebase AppCheck
   await FirebaseAppCheck.instance.activate(
-    androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-    appleProvider: kDebugMode ? AppleProvider.debug : AppleProvider.appAttest,
+    providerAndroid: kDebugMode ? AndroidDebugProvider() : AndroidPlayIntegrityProvider(),
+    providerApple: kDebugMode ? AppleDebugProvider() : AppleAppAttestProvider(), // AppleDebugProvider(debugToken: 'x-x-x-x')
   );
 
   // Initialize additional packages

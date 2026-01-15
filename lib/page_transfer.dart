@@ -32,7 +32,7 @@ class TransferPage extends StatelessWidget {
                 child: Center( // Horizontal center, instead on left side
                   child: Container( // Necessary to limit width before IntrinsicHeight to prevent Text overflow
                     constraints: BoxConstraints(
-                      maxWidth: service_global.Constant.maxWidth, // maxWidth: min(MediaQuery.of(context).size.width - (service_global.Constant.padding*2), service_global.Constant.maxWidth),
+                      maxWidth: service_global.Constant.maxWidth,
                       minHeight: viewportConstraints.maxHeight // Expand to full screen
                     ),
                     padding: const EdgeInsets.all(service_global.Constant.padding),

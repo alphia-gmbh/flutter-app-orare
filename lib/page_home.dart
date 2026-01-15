@@ -1,7 +1,6 @@
 // Copyright 2023 Alphia GmbH
 import 'dart:async' show StreamSubscription;
-import 'dart:io' show Directory;
-import 'dart:math' show Random, log, min, pow;
+import 'dart:math' show Random, log, min;
 import 'dart:ui' as ui show TextDirection;
 import 'package:alphia_core/alphia_core.dart' show CoreAnimatedSwitcher, CoreInstance, CorePlatform, CoreProgressIndicator, CoreSelectionArea, CoreSignOutButton, CoreTheme, coreShowDialog, coreShowSnackbar, coreSignInUser;
 import 'package:cloud_firestore/cloud_firestore.dart' show DocumentChangeType, ListenSource, SetOptions;
@@ -13,6 +12,7 @@ import 'package:go_router/go_router.dart' show GoRouter;
 import 'package:in_app_review/in_app_review.dart' show InAppReview;
 import 'package:material_symbols_icons/symbols.dart' show Symbols;
 import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
+import 'crossplatform_io.dart' if (dart.library.js_interop) 'crossplatform_web.dart' as crossplatform;
 import 'page_card.dart' show CardPage;
 import 'service_global.dart' as service_global;
 import 'service_notification.dart' as service_notification;
@@ -74,7 +74,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         userStreamSubscription?.cancel(); // Avoid Firestore permission error
         cardStreamSubscription?.cancel(); // Avoid Firestore permission error
         // cardUpdateSubscription?.cancel(); // Avoid Firestore permission error
-        if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.setAnalyticsCollectionEnabled(false);} // Disable analytics
         if (CoreInstance.context.mounted) GoRouter.of(CoreInstance.context).go('/sign-in');
         // if (service_global.userDocNotifier.value?['localeSignOut'] != true) {service_global.showSnackbar(content: 'Automatically signed out');}
         // Delete transfer
@@ -90,7 +89,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         if (!service_global.CrossPlatform.isWeb) {
           final tempDir = await getTemporaryDirectory();
           for (final file in tempDir.listSync()) {if (file.path.endsWith('.png') || file.path.endsWith('.zip')) file.deleteSync();}
-          final shareDir = Directory('${tempDir.path}/share_plus');
+          final shareDir = crossplatform.crossDirectory('${tempDir.path}/share_plus');
           if (shareDir.existsSync()) {
             for (final file in shareDir.listSync()) {if (file.path.endsWith('.png') || file.path.endsWith('.zip')) file.deleteSync();}
           }
@@ -102,6 +101,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         // Transferring from Google account to Guest account // Failed assertion: 'itemIndex >= 0 && itemIndex < _itemsCount': is not true.
         animatedListKey.currentState?.removeAllItems((context, animation) => const SizedBox.shrink(), duration: Duration.zero); // 'package:flutter/src/widgets/animated_scroll_view.dart': Failed assertion: line 1184 pos 12: 'itemIndex >= 0 && itemIndex < _itemsCount': is not true. _SliverAnimatedMultiBoxAdaptorState.removeItem (package:flutter/src/widgets/animated_scroll_view.dart:1184:12) _SliverAnimatedMultiBoxAdaptorState.removeAllItems
         await cardStreamSubscription?.cancel();
+        service_global.Instance.crashlytics.log('snowiness'); // Reference in case of error
         final collection = service_global.Instance.db.collection('users').doc(user.uid).collection('cards').orderBy('timeCreated', descending: true); // Order by timestamp newest cards on top
         cardStreamSubscription = collection.snapshots(source: service_global.CrossPlatform.isWeb ? ListenSource.defaultSource : ListenSource.cache).listen((event) {
           progressIndicatorNotifier.value = false;
@@ -161,25 +161,15 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               break;
             }
           }
-          final docChanges = event.docChanges;
-          if ((docChanges.length == 1) && (docChanges.first.type == DocumentChangeType.added) && (streakNotifier.value >= 3)) {
-            if (!service_global.CrossPlatform.isWeb) {service_global.Instance.analytics.logEvent(
-              name: 'streak',
-              parameters: <String, String>{ // Analytics requires String to prevent (not set) error value
-                'streak_numberOfDays': (List<int>.generate((log(365*2)/log(10)*6).ceil(), (int index) => pow(10, index / 6).round())..insert(0,0)).lastWhere((element) => element <= streakNotifier.value).toString(), // Cluster by E6 Series
-                'streak_timeHour': DateTime.now().hour.toString(), // Hour of day
-                'streak_timeWeekday': DateTime.now().weekday.toString(),
-              },
-            );}
-          }
 
           // Onboarding experience to activate support after the second card is created
           if ((event.size == 2) && (event.docChanges.length == 1) && (service_global.CrossPlatform.isIOS || service_global.CrossPlatform.isAndroid)) {
-            Future.delayed(service_global.Constant.animationDuration*2, () {service_global.Instance.db.collection('users').doc(service_global.Instance.auth.currentUser!.uid).set({'settings': {'supportIsEnabled': true}}, SetOptions(merge: true));});
+            service_global.Instance.crashlytics.log('chowder'); // Reference in case of error
+            Future.delayed(service_global.Constant.animationDuration*2, () {service_global.Instance.db.collection('users').doc(user.uid).set({'settings': {'supportIsEnabled': true}}, SetOptions(merge: true));});
           }
 
-          // Review experience after 30 and 60 and 90 cards
-          if (([30, 60, 120].contains(event.size)) && (event.docChanges.length == 1) && (service_global.CrossPlatform.isIOS || service_global.CrossPlatform.isAndroid)) {
+          // Review experience after 30 and 50 and 85 cards
+          if (([30, 50, 85].contains(event.size)) && (event.docChanges.length == 1) && (service_global.CrossPlatform.isIOS || service_global.CrossPlatform.isAndroid)) {
             final InAppReview inAppReview = InAppReview.instance;
             inAppReview.isAvailable().then((isAvailable) {
               if (isAvailable) {
@@ -220,6 +210,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   service_global.Instance.crashlytics.recordError(error, stackTrace, reason: 'errorCode soda');
                 }
               }
+            }
+          }
+          // Update card color scheme
+          final colorSchemeOld = service_global.userDocNotifier.value?['settings']?['colorIntensity'];
+          final colorSchemeNew = event.data()?['settings']?['colorIntensity'];
+          service_global.Instance.crashlytics.log('parmesan: {colorSchemeOld: ${colorSchemeOld.runtimeType}, colorSchemeNew: ${colorSchemeNew.runtimeType}'); // Reference in case of error
+          if (colorSchemeOld != colorSchemeNew) {
+            if (colorSchemeNew is int) {
+              service_global.cardColorSchemeNotifier.value = colorSchemeNew;
+            } else if (service_global.cardColorSchemeNotifier.value != service_global.DefaultSettings.cardColorScheme) {
+              service_global.cardColorSchemeNotifier.value = service_global.DefaultSettings.cardColorScheme;
             }
           }
           // Update daily reminder notifications
@@ -275,7 +276,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
   // Animated dismiss background widget
   Widget animatedDismissBackground(BuildContext context, Animation<double> animation, {required String source}) {
-    final contextWidth = (MediaQuery.of(context).size.width < service_global.Constant.maxWidth) ? (MediaQuery.of(context).size.width - (service_global.Constant.padding*2)) : service_global.Constant.maxWidth;
+    final contextWidth = (MediaQuery.widthOf(context) < service_global.Constant.maxWidth) ? (MediaQuery.widthOf(context) - (service_global.Constant.padding*2)) : service_global.Constant.maxWidth;
     final contextHeight = contextWidth / (service_global.Constant.cardAspectRatio[source] ?? service_global.Constant.cardAspectRatio['default']!);
     final paddingAnimation = animation.drive(CurveTween(curve: Curves.easeOutCubic)).drive(EdgeInsetsTween(begin: const EdgeInsets.only(top: 0), end: const EdgeInsets.only(top: service_global.Constant.padding))); // Animation value is in reverse // globalAnimationDuration *0.75
     final heightAnimation = animation.drive(CurveTween(curve: Curves.easeOutCubic)); // Animation value is in reverse // globalAnimationDuration *0.75
@@ -300,7 +301,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   }
   // Animated delete of custom card
   Widget animatedDeleteCustomCard(BuildContext context, Animation<double> animation, {required service_global.Entry entry}) {
-    final contextWidth = min(MediaQuery.of(context).size.width - (service_global.Constant.padding*2), service_global.Constant.maxWidth); // (MediaQuery.of(context).size.width < service_global.Constant.maxWidth) ? (MediaQuery.of(context).size.width - (service_global.Constant.padding*2)) : service_global.Constant.maxWidth;
+    final contextWidth = min(MediaQuery.widthOf(context) - (service_global.Constant.padding*2), service_global.Constant.maxWidth);
     final contextHeight = contextWidth / service_global.Constant.cardAspectRatio['default']!;
     final paddingAnimation = animation.drive(CurveTween(curve: Curves.easeOutCubic)).drive(EdgeInsetsTween(begin: const EdgeInsets.only(top: 0), end: const EdgeInsets.only(top: service_global.Constant.padding))); // Animation value is in reverse // globalAnimationDuration *1
     final opacityAnimation = animation.drive(CurveTween(curve: Curves.easeOutCubic)); // Animation value is in reverse // globalAnimationDuration *1
@@ -328,7 +329,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     text: TextSpan(text: service_global.GlobInstance.text.onboardingHint, style: Theme.of(service_global.Instance.navigatorKey.currentState!.context).textTheme.titleMedium),
     textScaler: service_global.Instance.textScaler,
     textDirection: ui.TextDirection.ltr,
-  )..layout(maxWidth: min(MediaQuery.of(service_global.Instance.navigatorKey.currentState!.context).size.width - (service_global.Constant.padding*2), service_global.Constant.maxWidth) - service_global.Constant.padding*2);
+  )..layout(maxWidth: min(MediaQuery.widthOf(service_global.Instance.navigatorKey.currentState!.context) - (service_global.Constant.padding*2), service_global.Constant.maxWidth) - service_global.Constant.padding*2);
 
   // Main
   @override
@@ -341,8 +342,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       systemNavigationBarColor: Theme.of(context).colorScheme.surface,
       systemNavigationBarDividerColor: Theme.of(context).colorScheme.surface,
     ));
-    // final textFieldWidth = ((MediaQuery.of(context).size.width - service_global.Constant.padding) / ((MediaQuery.of(context).size.width - service_global.Constant.padding) / (service_global.Constant.maxWidth - service_global.Constant.padding)).ceil()) - service_global.Constant.padding;
-    final contextWidth = min(MediaQuery.of(context).size.width - (service_global.Constant.padding*2), service_global.Constant.maxWidth);
+    final contextWidth = min(MediaQuery.widthOf(context) - (service_global.Constant.padding*2), service_global.Constant.maxWidth);
     return GestureDetector( // Remove focus from text fields and close keyboard, when tapping remote area
       onTap: () {FocusManager.instance.primaryFocus?.unfocus();},
       child: CoreSelectionArea(
@@ -368,8 +368,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   SliverAppBar(
                     pinned: true,
                     floating: false,
-                    expandedHeight: MediaQuery.of(context).size.height*0.25, // iPhone optimized
-                    // expandedHeight: MediaQuery.of(context).size.height*0.25, // Marketing screenshot value
+                    expandedHeight: MediaQuery.heightOf(context) *0.25, // iPhone optimized
+                    // expandedHeight: MediaQuery.heightOf(context) *0.25, // Marketing screenshot value
                     scrolledUnderElevation: 0, // Avoid tint coloring
                     backgroundColor: Colors.transparent,
                     // title: Text('Orare', style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.blue)), // For checking and adjusting the vertical alignment of flexible space text
@@ -447,6 +447,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                               : const SizedBox(key: ValueKey<bool>(false))); // Avoids jumping of the suffix icon
                             }
                         ),
+                      const SizedBox(width: 4),
 
 
                       // if (service_global.CrossPlatform.isIOS)
@@ -473,10 +474,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                       //    },
                       //   ),
                       if (CorePlatform.isWeb)
-                        const SizedBox(width: service_global.Constant.padding *2),
-                      if (CorePlatform.isWeb)
                         const CoreSignOutButton(),
-                      const SizedBox(width: (CoreTheme.padding *2) -17), // Right spacing correction, resulting in globalPadding*2
                     ],
                     bottom: PreferredSize( // Clip the cards under the SliverAppBar
                       preferredSize: const Size.fromHeight(service_global.Constant.radius),
@@ -554,13 +552,14 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                         border: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(service_global.Constant.innerRadius),
                                         ),
-                                        suffixIcon: CoreAnimatedSwitcher((textFieldListenable > 0)
-                                          ? IconButton(
-                                              key: UniqueKey(), // Key needs to be unique for each suffix icon
-                                              icon: const Icon(Icons.close_rounded),
-                                              onPressed: textFieldController.clear,
-                                            )
-                                          : SizedBox(key: UniqueKey()), // Avoids jumping of the suffix icon
+                                        suffixIcon: AnimatedOpacity(
+                                          opacity: (textFieldListenable > 0) ? 1 : 0,
+                                          curve: Curves.easeOutCubic,
+                                          duration: CoreTheme.animationDuration,
+                                          child: IconButton(
+                                            icon: const Icon(Icons.close_rounded),
+                                            onPressed: (textFieldListenable > 0) ? textFieldController.clear : null,
+                                          )
                                         ),
                                       ),
                                       onSubmitted: (text) {if (text.trim().isNotEmpty) {
@@ -709,7 +708,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 // Clip the cards under the SliverAppBar
 class CardClipper extends CustomClipper<Path> {
   final double _overlap = 4; // Small overlap to avoid visible zero gap
-  final _dynamicPadding = (MediaQuery.of(service_global.Instance.navigatorKey.currentState!.context).size.width < service_global.Constant.maxWidth) ? service_global.Constant.padding : (MediaQuery.of(service_global.Instance.navigatorKey.currentState!.context).size.width - MediaQuery.of(service_global.Instance.navigatorKey.currentState!.context).padding.horizontal - service_global.Constant.maxWidth) / 2;
+  final _dynamicPadding = (MediaQuery.widthOf(service_global.Instance.navigatorKey.currentState!.context) < service_global.Constant.maxWidth) ? service_global.Constant.padding : (MediaQuery.widthOf(service_global.Instance.navigatorKey.currentState!.context) - MediaQuery.paddingOf(service_global.Instance.navigatorKey.currentState!.context).horizontal - service_global.Constant.maxWidth) / 2;
 
   @override
   Path getClip(Size size) {

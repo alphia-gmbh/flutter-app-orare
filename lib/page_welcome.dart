@@ -68,7 +68,7 @@ class _WelcomePageState extends State<WelcomePage> {
                 child: Center(
                   child: Container( // Necessary to limit width before IntrinsicHeight to prevent Text overflow
                     constraints: BoxConstraints(
-                      maxWidth: service_global.Constant.maxWidth, // maxWidth: min(MediaQuery.of(context).size.width - (service_global.Constant.padding*2), service_global.Constant.maxWidth),
+                      maxWidth: service_global.Constant.maxWidth,
                       minHeight: viewportConstraints.maxHeight // Expand to full screen
                     ),
                     padding: const EdgeInsets.all(service_global.Constant.padding),
@@ -236,8 +236,6 @@ class CustomSignInButton extends StatelessWidget {
         // Check if transfer pending
         final currUser = service_global.Instance.auth.currentUser;
         if (!service_global.CrossPlatform.isWeb && (currUser != null)) {await service_global.transferUserDocs(currUser: currUser);}
-        // Analytics
-        if (!service_global.CrossPlatform.isWeb) {await service_global.Instance.analytics.setAnalyticsCollectionEnabled(true);} // Enable analytics
         if (!service_global.CrossPlatform.isWeb && isTransfer) {
           service_global.Instance.crashlytics.log('phonics'); // Reference in case of error
           service_global.syncCards();

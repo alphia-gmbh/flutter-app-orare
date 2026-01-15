@@ -1,22 +1,22 @@
 // Copyright 2023 Alphia GmbH
 import 'dart:convert' show HtmlEscape, jsonEncode;
-import 'dart:io' show File; // Substituted by crossplatform_io.dart
-import 'dart:math' show Random, log, max, min, pow;
+import 'dart:math' show Random, max, min;
 import 'package:alphia_core/alphia_core.dart' show CoreInstance, CoreSelectionArea, CoreShowDialog, CoreShowSnackbar, CoreTheme, coreAuthenticateUser, coreShowDialog, coreShowSnackbar;
 import 'package:archive/archive.dart' show Archive, ArchiveFile, ZipEncoder;
 import 'package:async/async.dart' show RestartableTimer;
 import 'package:cloud_firestore/cloud_firestore.dart' show DocumentSnapshot, FirebaseException, FirebaseFirestore, GetOptions, QuerySnapshot, Source, Timestamp, average;
 import 'package:cloud_functions/cloud_functions.dart' show FirebaseFunctions, FirebaseFunctionsException, HttpsCallableOptions;
 import 'package:firebase_auth/firebase_auth.dart' show FirebaseAuth, User;
+import 'package:flutter/cupertino.dart' show CupertinoButton;
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback, PlatformException, SystemUiOverlayStyle, Uint8List;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart' show AndroidOptions, FlutterSecureStorage;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart' show FlutterSecureStorage;
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:material_symbols_icons/symbols.dart' show Symbols;
 import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
 import 'package:screenshot/screenshot.dart' show ScreenshotController;
-import 'package:share_plus/share_plus.dart' show ShareParams, SharePlus, ShareResultStatus, XFile;
+import 'package:share_plus/share_plus.dart' show ShareParams, SharePlus, XFile;
 import 'crossplatform_io.dart' if (dart.library.js_interop) 'crossplatform_web.dart' as crossplatform;
 import 'l10n/app_localizations.dart' show AppLocalizations;
 import 'page_card.dart' show CardPage;
@@ -31,12 +31,12 @@ final throttleNotifier = ValueNotifier<RestartableTimer>(RestartableTimer(const 
 final transferRetriesNotifier = ValueNotifier<int>(0); // Dismiss transfer after 5 retries
 final notificationNotifier = ValueNotifier<String?>(null); // Supporting question String
 final notificationRefreshTimeNotifier = ValueNotifier<DateTime>(DateTime.now().add(const Duration(hours: 12))); // Next notification refresh during current app runtime // Checks if notification text update is required
-
+final cardColorSchemeNotifier = ValueNotifier<int>(DefaultSettings.cardColorScheme); // Notifier global variable for card color scheme changes // 0: bright, 1: soft, 2: gray
 
 // Service global variables
 class Constant {
   static const appName = 'Orare';
-  static const appVersion = '2.2.2'; // Updated automatically
+  static const appVersion = '2.3.2'; // Updated automatically
   static const applePrivateRelayDomain = '@privaterelay.appleid.com'; // Apple private relay domain instead of user email address
   static const animationDuration = CoreTheme.animationDuration; // Base value 300ms // 0.75: 225ms, 1.0: 300ms, 1.5: 450ms, 2.0: 600ms // Optimum between 200-500ms // Slow open or forward and fast close or backwards // Global animation curves // On screen animation: fastOutSlowIn, Enter animation: outCubic (or decelerate), Exit animation: inCubic (or easeIn)
   static const double maxWidth = CoreTheme.maxWidth; // Max card and reading width // Corresponding with webview style CSS
@@ -51,9 +51,10 @@ class Constant {
 class DefaultSettings {
   static const supportIsEnabled = false;
   // static const introIsEnabled = true;
+  static const int cardColorScheme = 0;
   static const uniqueColorIsEnabled = false;
   static const reminderIsEnabled = false;
-  static const reminderValue = <int>[20, 00];
+  static const reminderValue = <int>[21, 00];
 }
 class Instance {
   static final navigatorKey = CoreInstance.navigatorKey; // Global navigator key for context
@@ -62,11 +63,9 @@ class Instance {
   static final cloudFct = FirebaseFunctions.instanceFor(region: 'europe-west1');
   // ignore: prefer_const_declarations
   static final crashlytics = crossplatform.firebaseCrashlyticsInstance; // FirebaseCrashlytics.instance;
-  // ignore: prefer_const_declarations
-  static final analytics = crossplatform.firebaseAnalyticsInstance; // FirebaseAnalytics.instance;
-  static const secStorage = FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true));
+  static const secStorage = FlutterSecureStorage();
   static final str = AppLocalizations.of(CoreInstance.context);
-  static final textScaler = MediaQuery.of(CoreInstance.context).textScaler;
+  static final textScaler = MediaQuery.textScalerOf(CoreInstance.context);
   static final focusNode = FocusNode();
 }
 class GlobInstance {
@@ -138,7 +137,7 @@ Future<bool> createTransferToken() async {
     final bool responseData = response.data;
     if (!responseData) {
       // 'Cloud function createTransferToken failed'
-      throw StateError('errorCode arena');
+      throw StateError('errorCode waffle');
     }
     return true;
   }
@@ -228,6 +227,12 @@ class Entry {
 
   Entry({this.docID, required this.timeCreated, required this.timeModified, this.prompt, required this.text, required this.colorID});
 
+  ServColoration get _coloration => ServColoration.from(colorID: colorID, colorScheme: cardColorSchemeNotifier.value);
+  LinearGradient get gradient => _coloration.gradient;
+  Brightness get brightness => _coloration.brightness;
+  Color get onSurface => _coloration.onSurface;
+  Color get onSurfaceVariant => _coloration.onSurfaceVariant;
+
   factory Entry.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() as Map<String, dynamic>;
     return Entry(
@@ -250,14 +255,6 @@ class Entry {
     final promptField = prompt;
     if (promptField != null) entry['prompt'] = promptField;
     return entry;
-  }
-
-  LinearGradient gradient() {
-    return ServColoration.gradient(colorID: colorID);
-  }
-
-  Color onColor() {
-    return ServColoration.onColor(colorID: colorID);
   }
 }
 
@@ -287,19 +284,6 @@ void storeCard({String? prompt, required String text}) {
       }
     }
   }
-  // Log event
-  if (!CrossPlatform.isWeb) {Instance.analytics.logEvent(
-    name: 'card_store',
-    parameters: <String, String>{ // Analytics requires String to prevent (not set) error value
-      'card_store_textLength': (List<int>.generate((log(Constant.cardTextLength['maxLength']!)/log(10)*6).ceil(), (int index) => pow(10, index / 6).round())..insert(0,0)).lastWhere((element) => element <= text.length).toString(), // Cluster by E6 Series
-      'card_store_hasPrompt': (prompt != null).toString(),
-      'card_store_colorID': entry.colorID.toString(),
-      'card_store_platform': CrossPlatform.operatingSystem,
-      'card_store_provider': Concatenate.userProviderId(currUser: currUser),
-      'card_store_timeHour': DateTime.now().hour.toString(), // Hour of day
-      'card_store_timeWeekday': DateTime.now().weekday.toString(),
-    },
-  );}
   // Refresh prompt and notifications, if outdated
   if (notificationRefreshTimeNotifier.value.isBefore(DateTime.now())) {
     notificationRefreshTimeNotifier.value = DateTime.now().add(const Duration(hours: 12));
@@ -307,26 +291,10 @@ void storeCard({String? prompt, required String text}) {
   }
 }
 
-// Function for sharing card on Firebase
-void storeShare({required Entry entry, required String shareResult}) {
-  final currUser = Instance.auth.currentUser!;
-  // Log event
-  if (!CrossPlatform.isWeb) {Instance.analytics.logEvent(
-    name: 'card_share',
-    parameters: <String, String>{ // Analytics requires String to prevent (not set) error value
-      'card_share_sharedWith': shareResult,
-      'card_share_colorID': entry.colorID.toString(),
-      'card_share_platform': CrossPlatform.operatingSystem,
-      'card_share_provider': Concatenate.userProviderId(currUser: currUser),
-      'card_share_timeHour': DateTime.now().hour.toString(), // Hour of day
-      'card_share_timeWeekday': DateTime.now().weekday.toString(),
-    },
-  );}
-}
-
 // Function for updating card on Firebase
 void updateCard({required Entry entry, DateTime? timeCreated, bool prompt=true, String? text}) async {
   final currUser = Instance.auth.currentUser!;
+  Instance.crashlytics.log('pauper'); // Reference in case of error
   Instance.db.collection('users').doc(currUser.uid).collection('cards').doc(entry.docID).delete(); // No await for better offline handling.
   final updatedEntry = Entry(timeCreated: entry.timeCreated, timeModified: entry.timeModified, prompt: entry.prompt, text: entry.text, colorID: entry.colorID);
   if (timeCreated != null) {
@@ -355,12 +323,14 @@ void updateCard({required Entry entry, DateTime? timeCreated, bool prompt=true, 
   // Restore updated document // Use new document.id for better offline handling
   // Artificial delay for better animation experience
   await Future.delayed(CoreTheme.animationDuration);
+  Instance.crashlytics.log('lyricist'); // Reference in case of error
   final updateRef = Instance.db.collection('users').doc(currUser.uid).collection('cards').doc();
   updateRef.set(updatedEntry.toFirestore()); // No await for better offline handling.
   // Artificial delay for better animation experience
   await Future.delayed(CoreTheme.animationDuration *3);
   // Snackbar for information and undo
   void undoUpdate() {
+    Instance.crashlytics.log('astute'); // Reference in case of error
     updateRef.delete();
     Instance.db.collection('users').doc(currUser.uid).collection('cards').doc().set(entry.toFirestore());
   }
@@ -388,21 +358,12 @@ void updateCard({required Entry entry, DateTime? timeCreated, bool prompt=true, 
       clearSnackbars: true,
     );
   }
-  // Log event
-  if (!CrossPlatform.isWeb) {Instance.analytics.logEvent(
-    name: 'card_update',
-    parameters: <String, String>{ // Analytics requires String to prevent (not set) error value
-      'card_update_keys': '${(timeCreated != null) ? 'timeCreated, ' : ''}${(!prompt) ? 'prompt, ' : ''}${(text != null) ? 'text, ' : ''}'.replaceFirst(RegExp(r', $'), ''),
-      'card_update_colorID': entry.colorID.toString(),
-      'card_update_timeHour': DateTime.now().hour.toString(), // Hour of day
-      'card_update_timeWeekday': DateTime.now().weekday.toString(),
-    },
-  );}
 }
 
 // Function for deleting card on Firebase
 void deleteCard({required Entry entry}) async {
   final currUser = Instance.auth.currentUser!;
+  Instance.crashlytics.log('scoured'); // Reference in case of error
   Instance.db.collection('users').doc(currUser.uid).collection('cards').doc(entry.docID).delete(); // No await for better offline handling.
   // Artificial delay for better animation experience
   await Future.delayed(CoreTheme.animationDuration *1.5);
@@ -410,18 +371,12 @@ void deleteCard({required Entry entry}) async {
   coreShowSnackbar(
     content: CoreInstance.text.snackDeleted,
     actionLabel: CoreInstance.text.buttonUndo,
-    actionFunction: () {Instance.db.collection('users').doc(currUser.uid).collection('cards').doc().set(entry.toFirestore());},
+    actionFunction: () {
+      Instance.crashlytics.log('groom'); // Reference in case of error
+      Instance.db.collection('users').doc(currUser.uid).collection('cards').doc().set(entry.toFirestore());
+      },
     clearSnackbars: true,
   );
-  // Log event
-  if (!CrossPlatform.isWeb) {Instance.analytics.logEvent(
-    name: 'card_delete',
-    parameters: <String, String>{ // Analytics requires String to prevent (not set) error value
-      'card_delete_colorID': entry.colorID.toString(),
-      'card_delete_timeHour': DateTime.now().hour.toString(), // Hour of day
-      'card_delete_timeWeekday': DateTime.now().weekday.toString(),
-    },
-  );}
 }
 
 
@@ -454,7 +409,7 @@ Future<void> shareCard({required Entry entry}) async {
       height: localSize,
       padding: const EdgeInsets.all(localPadding),
       alignment: Alignment.center,
-      decoration: BoxDecoration(gradient: entry.gradient()),
+      decoration: BoxDecoration(gradient: entry.gradient),
       child: FittedBox( // Scale to prevent overflow
         fit: BoxFit.scaleDown, // Scales only if overflow would happen // overflow: TextOverflow.fade,
         child: !twoColumnLayout
@@ -463,7 +418,7 @@ Future<void> shareCard({required Entry entry}) async {
             child: RichText( // RichText preferred over Text.rich to avoid device font size scaling
               textAlign: (textLength > Constant.cardTextLength['alignStart']!) ? TextAlign.start : TextAlign.center,
               text: TextSpan(
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: entry.onColor().withValues(alpha: 0.87)),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: entry.onSurfaceVariant), // .withValues(alpha: 0.87)),
                 children: <InlineSpan>[
                   TextSpan(text: timeCreatedText),
                   const WidgetSpan(child: SizedBox(height: 25.6)), // 16 * 1.6 = 25.6
@@ -471,7 +426,7 @@ Future<void> shareCard({required Entry entry}) async {
                   if (entry.prompt != null) const WidgetSpan(child: SizedBox(height: 25.6)),
                   TextSpan(
                     text: entry.text,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onColor()),
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onSurface),
                   ),
                 ],
               ),
@@ -486,7 +441,7 @@ Future<void> shareCard({required Entry entry}) async {
                 child: RichText( // RichText preferred over Text.rich to avoid device font size scaling
                   textAlign: TextAlign.start,
                   text: TextSpan(
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: entry.onColor().withValues(alpha: 0.87)),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: entry.onSurfaceVariant), // .withValues(alpha: 0.87)),
                     children: <InlineSpan>[
                       TextSpan(text: timeCreatedText),
                       const WidgetSpan(child: SizedBox(height: 25.6)), // 16 * 1.6 = 25.6
@@ -494,7 +449,7 @@ Future<void> shareCard({required Entry entry}) async {
                       if (entry.prompt != null) const WidgetSpan(child: SizedBox(height: 25.6)),
                       TextSpan(
                         text: firstColumn,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onColor()),
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onSurface),
                       ),
                     ],
                   ),
@@ -506,12 +461,12 @@ Future<void> shareCard({required Entry entry}) async {
                 child: RichText( // RichText preferred over Text.rich to avoid device font size scaling
                   textAlign: TextAlign.start,
                   text: TextSpan(
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: entry.onColor().withValues(alpha: 0.87)),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: entry.onSurfaceVariant), // .withValues(alpha: 0.87)),
                     children: <InlineSpan>[
                       const WidgetSpan(child: SizedBox(height: 20 + 25.6)), // 16 * 1.6 = 25.6
                       TextSpan(
                         text: secondColumn,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onColor()),
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onSurface),
                       ),
                     ],
                   ),
@@ -528,16 +483,16 @@ Future<void> shareCard({required Entry entry}) async {
   if (!CrossPlatform.isWeb) {
     // Save image
     final tempDir = await getTemporaryDirectory();
-    final imgFile = await File('${tempDir.path}/$filename').writeAsBytes(capturedImage);
+    final imgFile = await crossplatform.crossFile('${tempDir.path}/$filename', capturedImage);
     // Share image
-    final shareResult = await SharePlus.instance.share(ShareParams(
+    await SharePlus.instance.share(ShareParams(
       files: [XFile(imgFile.path)],
       title: timeCreatedText,
       subject: timeCreatedText,
       // text: CrossPlatform.isIOS ? null : entry.text,
       sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size),
     ); // mimeType: 'image/png'
-    if (shareResult.status == ShareResultStatus.success) {storeShare(entry: entry, shareResult: shareResult.raw.toString());} // Ensure shareResult.raw is really String
+    // if (shareResult.status == ShareResultStatus.success) {storeShare(entry: entry, shareResult: shareResult.raw.toString());} // Ensure shareResult.raw is really String
     await imgFile.delete(); // ((shareResult.status == ShareResultStatus.dismissed) || (shareResult.status == ShareResultStatus.unavailable))
   }
   else { // CrossPlatform.isWeb
@@ -596,12 +551,13 @@ Future<void> syncCards({bool verbose = false}) async {
   }
   try {
     // Get serverside hash
+    Instance.crashlytics.log('taco: {collectionPath: ${collectionPath.path}'); // Reference in case of error // Todo: remove after debugging
     final serverCollection = await collectionPath.aggregate(average('timeModified')).get();
     final serverHash = (serverCollection.getAverage('timeModified') ?? 0).round();
     // Sync cards
     if (serverHash != cacheHash) {
       readCards();
-      if (kDebugMode) {coreShowSnackbar(content: 'Debug Sync');}
+      if (kDebugMode) {coreShowSnackbar(content: 'Debug sync');}
     }
   }
   on PlatformException catch (error, stackTrace) {
@@ -611,7 +567,9 @@ Future<void> syncCards({bool verbose = false}) async {
         if (verbose) coreShowSnackbar(content: CoreInstance.text.snackOffline);
       }
       default: {
-        Instance.crashlytics.recordError(error, stackTrace, reason: 'errorCode detector');
+        Instance.crashlytics.recordError(error, stackTrace, reason: 'errorCode detector: ${error.code}'); // Todo: remove ${error.code} after debugging
+        readCards(); // Todo: remove after debugging
+        if (kDebugMode) {coreShowSnackbar(content: 'Debug failback sync');} // Todo: remove after debugging
       }
     }
   }
@@ -664,22 +622,13 @@ Future<void> exportAccountData() async {
     final filename = '${Constant.appName} ${GlobInstance.text.personalDataExportB} ${DateTime.now().millisecondsSinceEpoch}.zip';
     if (!CrossPlatform.isWeb) {
       final tempDir = await getTemporaryDirectory();
-      final zipFile = await File('${tempDir.path}/$filename').writeAsBytes(archive);
-      final shareResult = await SharePlus.instance.share(ShareParams(
+      final zipFile = await crossplatform.crossFile('${tempDir.path}/$filename', archive); // File('${tempDir.path}/$filename').writeAsBytes(archive);
+      await SharePlus.instance.share(ShareParams(
         files: [XFile(zipFile.path, mimeType: 'application/zip')],
         title: GlobInstance.text.personalDataExportB,
         subject: GlobInstance.text.personalDataExportB,
         sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size),
       );
-      if (shareResult.status == ShareResultStatus.success) {
-        if (!CrossPlatform.isWeb) {Instance.analytics.logEvent(
-          name: 'account_export',
-          parameters: <String, String>{ // Analytics requires String to prevent (not set) error value
-            'account_export_sharedWith': shareResult.raw,
-            'account_export_numberOfCards': (List<int>.generate((log(3650)/log(10)*6).ceil(), (int index) => pow(10, index / 6).round())..insert(0,0)).lastWhere((element) => element <= collection.size).toString(), // Cluster by E6 Series
-          },
-        );}
-      }
       await zipFile.delete();
     }
     else { // CrossPlatform.isWeb
@@ -715,7 +664,7 @@ Future<String?> showTextEditDialog({required String content}) {
           appBar: AppBar(
             scrolledUnderElevation: 0, // Workaround as TextFormField is elevating the AppBar
             backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh, // Colors.transparent not working due to status bar color
-            title: Text(CoreInstance.text.buttonEditText),
+            title: Text(GlobInstance.text.dialogTitleEditText),
             leading: IconButton(
               icon: const Icon(Icons.close_rounded),
               tooltip: CoreInstance.text.buttonDiscard,
@@ -725,23 +674,35 @@ Future<String?> showTextEditDialog({required String content}) {
             ValueListenableBuilder<bool>(
               valueListenable: isEmptyNotifier,
               builder: (BuildContext context, bool isEmptyListenable, Widget? child) {
-              return TextButton(
-                onPressed: isEmptyListenable
-                  ? null
-                  : () {Navigator.maybePop(context, editedText.trim().replaceAll(RegExp(r'\n{3,}'), '\n\n'));}, // editedText is really a new text
-                child: Text(CoreInstance.text.buttonSave),
-              );}
+              return ([TargetPlatform.iOS, TargetPlatform.macOS].contains(Theme.of(CoreInstance.context).platform))
+                ? CupertinoButton(
+                    onPressed: isEmptyListenable
+                      ? null
+                      : () {Navigator.maybePop(context, editedText.trim().replaceAll(RegExp(r'\n{3,}'), '\n\n'));}, // editedText is really a new text
+                    child: Text(CoreInstance.text.buttonSave),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.only(right: CoreTheme.padding),
+                    child: TextButton(
+                      // style: ButtonStyle(backgroundColor: WidgetStateProperty<Color?>.fromMap(<WidgetStatesConstraint, Color?>{WidgetState.any: Theme.of(context).colorScheme.secondary})),
+                      onPressed: isEmptyListenable
+                        ? null
+                        : () {Navigator.maybePop(context, editedText.trim().replaceAll(RegExp(r'\n{3,}'), '\n\n'));}, // editedText is really a new text
+                      child: Text(CoreInstance.text.buttonSave),
+                    ),
+                  );
+              }
             ),
-            SizedBox(width: (CoreTheme.padding *2) -17), // Right spacing correction, resulting in globalPadding*2
+            // const SizedBox(width: CoreTheme.padding),
           ],
           ),
           body: SafeArea(
             child: Align(
               alignment: Alignment.topCenter,
               child: SingleChildScrollView(
-                scrollDirection: ((MediaQuery.of(context).size.height - MediaQuery.of(context).viewPadding.top - MediaQuery.of(context).viewInsets.bottom) < 150) ? Axis.vertical : Axis.horizontal, // Only scroll if height is smaller than 200
+                scrollDirection: ((MediaQuery.heightOf(context) - MediaQuery.viewPaddingOf(context).top - MediaQuery.viewInsetsOf(context).bottom) < 150) ? Axis.vertical : Axis.horizontal, // Only scroll if height is smaller than 200
                 child: SizedBox(
-                  width: min(Constant.maxWidth, (MediaQuery.of(context).size.width - (Constant.padding *2))),
+                  width: min(Constant.maxWidth, (MediaQuery.widthOf(context) - (Constant.padding *2))),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: Constant.padding),
                     child: TextFormField(
@@ -789,7 +750,7 @@ class CustomCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final contextWidth = min(MediaQuery.of(context).size.width - (Constant.padding*2), Constant.maxWidth); // (MediaQuery.of(context).size.width < Constant.maxWidth) ? (MediaQuery.of(context).size.width - (Constant.padding*2)) : Constant.maxWidth;
+    final contextWidth = min(MediaQuery.widthOf(context) - (Constant.padding*2), Constant.maxWidth);
     // final contextHeight = contextWidth / (Constant.cardAspectRatio[source] ?? Constant.cardAspectRatio['default']!);
     final contextHeight = contextWidth / Constant.cardAspectRatio['default']!;
     bool invisibleBarrier = false;
@@ -815,134 +776,139 @@ class CustomCard extends StatelessWidget {
               shareCard(entry: entry);
             }
           : null,
-        child: Ink(
-          padding: isCard ? const EdgeInsets.all(Constant.padding) : EdgeInsets.only(top: MediaQuery.of(context).padding.top, bottom: Constant.padding *1.5), // bottom: MediaQuery.of(context).padding.bottom), // Top padding according to app bar height 80
-          decoration: BoxDecoration(
-            borderRadius: isCard ? BorderRadius.circular(Constant.radius) : null, // Avoid corner overflow
-            gradient: entry.gradient(),
-          ),
-          child: LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) {
-            return ScrollConfiguration(
-              behavior: isCard ? ScrollConfiguration.of(context).copyWith(scrollbars: false) : ScrollConfiguration.of(context),
-              child: SingleChildScrollView( // Prevent overflow issues
-                child: LimitedBox(
-                  maxHeight: max(contextHeight - (Constant.padding*2), constraints.maxHeight), // Insert animation starting at 0 and maxHeight by context width or full screen height
-                  child: Column(
-                    // crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      // Unnecessary //const Spacer(flex: 1), // No space in card view : Smaller space in full view
-                      Flexible(
-                        flex: 10, // Get most of space
-                        child: ShaderMask(
-                          shaderCallback: (Rect rect) {
-                            return AbsoluteLinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: const [Colors.black, Colors.transparent],
-                              absoluteStops: [0.0, (!isCard && (scrollController.position.maxScrollExtent > 0)) ? 20.0 : 0.0], // Theme.of(context).textTheme.bodyMedium!.fontSize! * Theme.of(context).textTheme.bodyMedium!.height! = 20.0 // Absolute pixel stops
-                              ).createShader(rect);
-                          },
-                          // blendMode: BlendMode.overlay, //.dstOut, // Testing mode
-                          blendMode: BlendMode.dstOut,
+        child: ListenableBuilder(
+          listenable: cardColorSchemeNotifier,
+          builder: (context, child) {
+            return Ink(
+              padding: isCard ? const EdgeInsets.all(Constant.padding) : EdgeInsets.only(top: MediaQuery.paddingOf(context).top, bottom: CrossPlatform.isAndroid ? max(MediaQuery.paddingOf(context).bottom, Constant.padding *1.5) : Constant.padding *1.5), // Top padding according to app bar height 80
+              decoration: BoxDecoration(
+                borderRadius: isCard ? BorderRadius.circular(Constant.radius) : null, // Avoid corner overflow
+                gradient: entry.gradient,
+              ),
+              child: LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints constraints) {
+                return ScrollConfiguration(
+                  behavior: isCard ? ScrollConfiguration.of(context).copyWith(scrollbars: false) : ScrollConfiguration.of(context),
+                  child: SingleChildScrollView( // Prevent overflow issues
+                    child: LimitedBox(
+                      maxHeight: max(contextHeight - (Constant.padding*2), constraints.maxHeight), // Insert animation starting at 0 and maxHeight by context width or full screen height
+                      child: Column(
+                        // crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          // Unnecessary //const Spacer(flex: 1), // No space in card view : Smaller space in full view
+                          Flexible(
+                            flex: 10, // Get most of space
+                            child: ShaderMask(
+                              shaderCallback: (Rect rect) {
+                                return AbsoluteLinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: const [Colors.black, Colors.transparent],
+                                  absoluteStops: [0.0, (!isCard && (scrollController.position.maxScrollExtent > 0)) ? 20.0 : 0.0], // Theme.of(context).textTheme.bodyMedium!.fontSize! * Theme.of(context).textTheme.bodyMedium!.height! = 20.0 // Absolute pixel stops
+                                  ).createShader(rect);
+                              },
+                              // blendMode: BlendMode.overlay, //.dstOut, // Testing mode
+                              blendMode: BlendMode.dstOut,
 
-                          child: ShaderMask(
-                            shaderCallback: (Rect rect) {
-                              return AbsoluteLinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: const [Colors.black, Colors.transparent],
-                              absoluteStops: [0.0, (scrollController.position.maxScrollExtent > 0) ? 20.0 *2 : 0.0], // Absolute pixel stops
-                            ).createShader(rect);
-                            },
-                            // blendMode: BlendMode.overlay, //.dstOut, // Testing mode
-                            blendMode: BlendMode.dstOut,
+                              child: ShaderMask(
+                                shaderCallback: (Rect rect) {
+                                  return AbsoluteLinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
+                                  colors: const [Colors.black, Colors.transparent],
+                                  absoluteStops: [0.0, (scrollController.position.maxScrollExtent > 0) ? 20.0 *2 : 0.0], // Absolute pixel stops
+                                ).createShader(rect);
+                                },
+                                // blendMode: BlendMode.overlay, //.dstOut, // Testing mode
+                                blendMode: BlendMode.dstOut,
 
-                            child: Container( // Triple container necessary for optimal layout of scrollbar
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 2), // Avoid glitch at end of shader mask
-                              alignment: Alignment.center,
-                              child: SingleChildScrollView(
-                                controller: scrollController,
-                                // scrollDirection: isCard ? Axis.horizontal : Axis.vertical, // Workaround to maintain fade overflow in card mode with Axis.horizontal quasi deactivation, but enable scroll view in fullscreen mode with Axis.vertical
-                                physics: isCard ? const ScrollPhysics(parent: NeverScrollableScrollPhysics()) : null,
                                 child: Container( // Triple container necessary for optimal layout of scrollbar
                                   width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(vertical: 2), // Avoid glitch at end of shader mask
                                   alignment: Alignment.center,
-                                  child: Container( // Triple container necessary for optimal layout of scrollbar
-                                    // width: double.infinity,
-                                    width: min((Constant.maxWidth - (Constant.padding *2)), (MediaQuery.of(context).size.width - (Constant.padding *4))),
-                                    alignment: isCard ? Alignment.centerLeft : Alignment.center,
-                                    // child: ConstrainedBox(
-                                    //   constraints: BoxConstraints(maxWidth: min(constraints.maxWidth, (Constant.maxWidth - (Constant.padding *2)))), // Constrain scroll view in horizontal mode to constraints.maxWidth to avoid actual scrolling
-                                      child: RichText( // SelectableText.rich(
-                                        text: TextSpan(
-                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: entry.onColor().withValues(alpha: 0.87)),
-                                          children: <InlineSpan>[
-                                            if (!isCard) const WidgetSpan(child: SizedBox(height: 20.0 *2)), // Placeholder for ShaderMask
-                                            // TextSpan(text: '${question.replaceFirst(' ${DateFormat('MMM yyyy').format(DateTime.now())}', '')}\n'),
-                                            TextSpan(text: '${DateFormat('E, dd', locale).format(entry.timeCreated)}'
-                                              '${(entry.timeCreated.month != timeNow.month && entry.timeCreated.year == timeNow.year) ? ' ${DateFormat('MMM', locale).format(entry.timeCreated)}' : ''}'
-                                              '${(entry.timeCreated.year != timeNow.year) ? ' ${DateFormat('MMM yyyy', locale).format(entry.timeCreated)}' : ''}'
-                                              '\n'.replaceAll('.', '')),
-                                            const WidgetSpan(child: SizedBox(height: 25.6)), // WidgetSpan(child: SizedBox(height: isCard ? 25.6 : 35.2)), // Line height: 16 *1.6 : 22 *1.6
-                                            if (entry.prompt != null) TextSpan(text: '${entry.prompt}\n'),
-                                            if (entry.prompt != null) const WidgetSpan(child: SizedBox(height: 25.6)),
-                                            TextSpan(text: entry.text, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onColor(), height: 1.44)), // isCard ? 1.4 : 1.5)),
-                                            if (!isCard) const WidgetSpan(alignment: PlaceholderAlignment.top, child: SizedBox(height: 20.0 *3)), // Placeholder for ShaderMask
-                                          ],
-                                        ),
-                                        textAlign: (isCard || (entry.text.length > Constant.cardTextLength['alignStart']!)) ? TextAlign.start : TextAlign.center,
-                                        textScaler: Instance.textScaler,
-                                        // overflow: TextOverflow.fade,
+                                  child: SingleChildScrollView(
+                                    controller: scrollController,
+                                    // scrollDirection: isCard ? Axis.horizontal : Axis.vertical, // Workaround to maintain fade overflow in card mode with Axis.horizontal quasi deactivation, but enable scroll view in fullscreen mode with Axis.vertical
+                                    physics: isCard ? const ScrollPhysics(parent: NeverScrollableScrollPhysics()) : null,
+                                    child: Container( // Triple container necessary for optimal layout of scrollbar
+                                      width: double.infinity,
+                                      alignment: Alignment.center,
+                                      child: Container( // Triple container necessary for optimal layout of scrollbar
+                                        // width: double.infinity,
+                                        width: min((Constant.maxWidth - (Constant.padding *2)), (MediaQuery.widthOf(context) - (Constant.padding *4))),
+                                        alignment: isCard ? Alignment.centerLeft : Alignment.center,
+                                        // child: ConstrainedBox(
+                                        //   constraints: BoxConstraints(maxWidth: min(constraints.maxWidth, (Constant.maxWidth - (Constant.padding *2)))), // Constrain scroll view in horizontal mode to constraints.maxWidth to avoid actual scrolling
+                                          child: RichText( // SelectableText.rich(
+                                            text: TextSpan(
+                                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: entry.onSurfaceVariant), // .withValues(alpha: 0.87)),
+                                              children: <InlineSpan>[
+                                                if (!isCard) const WidgetSpan(child: SizedBox(height: 20.0 *2)), // Placeholder for ShaderMask
+                                                // TextSpan(text: '${question.replaceFirst(' ${DateFormat('MMM yyyy').format(DateTime.now())}', '')}\n'),
+                                                TextSpan(text: '${DateFormat('E, dd', locale).format(entry.timeCreated)}'
+                                                  '${(entry.timeCreated.month != timeNow.month && entry.timeCreated.year == timeNow.year) ? ' ${DateFormat('MMM', locale).format(entry.timeCreated)}' : ''}'
+                                                  '${(entry.timeCreated.year != timeNow.year) ? ' ${DateFormat('MMM yyyy', locale).format(entry.timeCreated)}' : ''}'
+                                                  '\n'.replaceAll('.', '')),
+                                                const WidgetSpan(child: SizedBox(height: 25.6)), // WidgetSpan(child: SizedBox(height: isCard ? 25.6 : 35.2)), // Line height: 16 *1.6 : 22 *1.6
+                                                if (entry.prompt != null) TextSpan(text: '${entry.prompt}\n'),
+                                                if (entry.prompt != null) const WidgetSpan(child: SizedBox(height: 25.6)),
+                                                TextSpan(text: entry.text, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onSurface, height: 1.44)), // isCard ? 1.4 : 1.5)),
+                                                if (!isCard) const WidgetSpan(alignment: PlaceholderAlignment.top, child: SizedBox(height: 20.0 *3)), // Placeholder for ShaderMask
+                                              ],
+                                            ),
+                                            textAlign: (isCard || (entry.text.length > Constant.cardTextLength['alignStart']!)) ? TextAlign.start : TextAlign.center,
+                                            textScaler: Instance.textScaler,
+                                            // overflow: TextOverflow.fade,
+                                          ),
+                                        // ),
                                       ),
-                                    // ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                      // const Spacer(flex: 1), // Get space between text and button ~8 : Get space to shift text out of center to top direction
-                      // if (MediaQuery.of(context).size.height > 226 || isCard) // AppBar 80 + 4*16 + 40 + 2*16 + Buffer 10
-                      //   if (MediaQuery.of(context).size.width > 210) // 40 + 2*16 * 21/9 + 2*16 + Buffer 10 // Min height no overflow 40 + 2*16 = 72 -> Min width no overflow > 72*21/9 = 168 -> Min page width no overflow > 168 + 2*16 = 200
-                      if (!isCard)
-                        if (constraints.maxWidth > 100 && max(contextHeight - (Constant.padding*2), constraints.maxHeight) > 40) // Button width 66 + Buffer // LimitedBox height > Button height 40
-                          SizedBox(
-                            height: 40 + (Constant.padding*2),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: <Widget>[
-                                OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    iconColor: entry.onColor(),
-                                    foregroundColor: entry.onColor(),
-                                    side: BorderSide(color: entry.onColor()),
-                                  ),
-                                  icon: CrossPlatform.isWeb ? const Icon(Symbols.download_rounded) : (CrossPlatform.isIOS ? const Icon(Symbols.ios_share_rounded) : const Icon(Symbols.share_rounded)),
-                                  label: CrossPlatform.isWeb ? Text(CoreInstance.text.buttonDownload) : Text(CoreInstance.text.buttonShare),
-                                  onPressed: () async {
-                                    if (!throttleNotifier.value.isActive && !invisibleBarrier) {throttleNotifier.value.reset();
-                                      invisibleBarrier = true;
-                                      HapticFeedback.lightImpact();
-                                      await shareCard(entry: entry);
-                                      invisibleBarrier = false;
-                                    }
-                                  },
+                          // const Spacer(flex: 1), // Get space between text and button ~8 : Get space to shift text out of center to top direction
+                          // if (MediaQuery.heightOf(context) > 226 || isCard) // AppBar 80 + 4*16 + 40 + 2*16 + Buffer 10
+                          //   if (MediaQuery.widthOf(context) > 210) // 40 + 2*16 * 21/9 + 2*16 + Buffer 10 // Min height no overflow 40 + 2*16 = 72 -> Min width no overflow > 72*21/9 = 168 -> Min page width no overflow > 168 + 2*16 = 200
+                          if (!isCard)
+                            if (constraints.maxWidth > 100 && max(contextHeight - (Constant.padding*2), constraints.maxHeight) > 40) // Button width 66 + Buffer // LimitedBox height > Button height 40
+                              SizedBox(
+                                height: 40 + (Constant.padding*2),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: <Widget>[
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        iconColor: entry.onSurfaceVariant,
+                                        foregroundColor: entry.onSurfaceVariant,
+                                        side: BorderSide(color: entry.onSurfaceVariant),
+                                      ),
+                                      icon: CrossPlatform.isWeb ? const Icon(Symbols.download_rounded, fill: 1) : (CrossPlatform.isIOS ? const Icon(Symbols.ios_share_rounded, fill: 1) : const Icon(Symbols.share_rounded, fill: 1)),
+                                      label: CrossPlatform.isWeb ? Text(CoreInstance.text.buttonDownload) : Text(CoreInstance.text.buttonShare),
+                                      onPressed: () async {
+                                        if (!throttleNotifier.value.isActive && !invisibleBarrier) {throttleNotifier.value.reset();
+                                          invisibleBarrier = true;
+                                          HapticFeedback.lightImpact();
+                                          await shareCard(entry: entry);
+                                          invisibleBarrier = false;
+                                        }
+                                      },
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                      // const SizedBox(height: 200) // Marketing screenshot value
-                    ],
+                              ),
+                          // const SizedBox(height: 200) // Marketing screenshot value
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                );},
               ),
-            );},
-          ),
-        ),
+            );
+          }
+        )
       ),
     );
   }
@@ -955,7 +921,8 @@ class AnimatedCustomCard extends AnimatedWidget {const AnimatedCustomCard({super
 
   @override
   Widget build(BuildContext context) {
-    final systemBarBrightState = ThemeData.estimateBrightnessForColor(entry.onColor());
+    final systemBarBrightState = entry.brightness;
+    // final systemBarBrightState = Theme.of(context).colorScheme.brightness;
     final scrollController = ScrollController();
     final locale = Localizations.localeOf(context).languageCode;
     final timeNow = DateTime.now();
@@ -966,20 +933,20 @@ class AnimatedCustomCard extends AnimatedWidget {const AnimatedCustomCard({super
     // final paddingAnimation = animation.drive(CurveTween(curve: Curves.decelerate))
     //   .drive(EdgeInsetsTween(
     //     begin: const EdgeInsets.all(Constant.padding),
-    //     end: EdgeInsets.only(top: 56+MediaQuery.of(context).padding.top, left: Constant.padding*2, right: Constant.padding*2, bottom: Constant.padding + MediaQuery.of(context).padding.bottom),
+    //     end: EdgeInsets.only(top: 56+MediaQuery.paddingOf(context).top, left: Constant.padding*2, right: Constant.padding*2, bottom: Constant.padding + MediaQuery.paddingOf(context).bottom),
     //   )); // Top padding according to app bar height 80
     final paddingAnimation = animation.drive(CurveTween(curve: Curves.decelerate))
       .drive(EdgeInsetsTween(
         begin: const EdgeInsets.symmetric(vertical: Constant.padding),
-        end: EdgeInsets.only(top: 56+MediaQuery.of(context).padding.top, bottom: Constant.padding *1.5), // bottom: MediaQuery.of(context).padding.bottom),
+        end: EdgeInsets.only(top: 56+MediaQuery.paddingOf(context).top, bottom: CrossPlatform.isAndroid ? max(MediaQuery.paddingOf(context).bottom, Constant.padding *1.5) : Constant.padding *1.5), // bottom: MediaQuery.paddingOf(context).bottom),
     ));
     final shaderMaskAnimation = animation.drive(CurveTween(curve: Curves.decelerate))
       .drive(Tween<double>(begin: 0, end: 1));
     final radiusAnimation = animation.drive(CurveTween(curve: Curves.easeInCirc))
       .drive(BorderRadiusTween(begin: BorderRadius.circular(Constant.radius), end: BorderRadius.zero));
-    final appBarOpacityAnimation = animation.drive(CurveTween(curve: Curves.easeInCirc))
-      .drive(Tween<double>(begin: 0, end: 1));
-    final buttonOpacityAnimation = animation.drive(CurveTween(curve: const Interval(0.6, 1, curve: Curves.easeInCirc)))
+    // final appBarOpacityAnimation = animation.drive(CurveTween(curve: const Interval(0.6, 1, curve: Curves.easeInCirc)))
+    //   .drive(Tween<double>(begin: 0, end: 1));
+    final opacityAnimation = animation.drive(CurveTween(curve: const Interval(0.6, 1, curve: Curves.easeInCirc)))
       .drive(Tween<double>(begin: 0, end: 1));
     final buttonSizeAnimation = animation.drive(CurveTween(curve: Curves.decelerate))
       .drive(Tween<double>(begin: 0, end: 40 + (Constant.padding*2)));
@@ -999,7 +966,7 @@ class AnimatedCustomCard extends AnimatedWidget {const AnimatedCustomCard({super
         padding: paddingAnimation.value,
         decoration: BoxDecoration(
           borderRadius: radiusAnimation.value, // radiusTween.evaluate(progress),
-          gradient: entry.gradient(),
+          gradient: entry.gradient,
         ),
         child: Column(
           // crossAxisAlignment: CrossAxisAlignment.start,
@@ -1025,7 +992,7 @@ class AnimatedCustomCard extends AnimatedWidget {const AnimatedCustomCard({super
                 //   // child: ConstrainedBox(
                 //   //   constraints: BoxConstraints(maxWidth: Constant.maxWidth),
                 //   child: Container(
-                //     width: min((Constant.maxWidth - (Constant.padding *2)), (MediaQuery.of(context).size.width - (Constant.padding *4))),
+                //     width: min((Constant.maxWidth - (Constant.padding *2)), (MediaQuery.widthOf(context) - (Constant.padding *4))),
                 //     alignment: textAlignmentAnimation.value,
                 child: Container(
                   width: double.infinity,
@@ -1036,11 +1003,11 @@ class AnimatedCustomCard extends AnimatedWidget {const AnimatedCustomCard({super
                     // scrollDirection: isCard ? Axis.horizontal : Axis.vertical, // Workaround to maintain fade overflow in card mode with Axis.horizontal quasi deactivation, but enable scroll view in fullscreen mode with Axis.vertical
                     physics: const ScrollPhysics(parent: NeverScrollableScrollPhysics()),
                     child: Container(
-                      width: min((Constant.maxWidth - (Constant.padding *2)), (MediaQuery.of(context).size.width - (Constant.padding *4))),
+                      width: min((Constant.maxWidth - (Constant.padding *2)), (MediaQuery.widthOf(context) - (Constant.padding *4))),
                       alignment: textAlignmentAnimation.value,
                       child: RichText(
                         text: TextSpan(
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: entry.onColor().withValues(alpha: 0.87)), // The same default style is necessary for WidgetSpan to avoid line height jumping.
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: (entry.onSurfaceVariant)), //.withValues(alpha: 0.87)), // The same default style is necessary for WidgetSpan to avoid line height jumping.
                           children: <InlineSpan>[
                             WidgetSpan(child: SizedBox(height: shaderMaskAnimation.value *20.0 *2)), // Placeholder for ShaderMask
                             TextSpan(text: '${DateFormat('E, dd', locale).format(entry.timeCreated)}'
@@ -1050,7 +1017,7 @@ class AnimatedCustomCard extends AnimatedWidget {const AnimatedCustomCard({super
                             const WidgetSpan(child: SizedBox(height: 25.6)), // WidgetSpan(child: SizedBox(height: textSpacerAnimation.value)), // Line height: 16 *1.6 : 22 *1.6
                             if (entry.prompt != null) TextSpan(text: '${entry.prompt}\n'),
                             if (entry.prompt != null) const WidgetSpan(child: SizedBox(height: 25.6)),
-                            TextSpan(text: entry.text, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onColor(), height: 1.44)),
+                            TextSpan(text: entry.text, style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: entry.onSurface, height: 1.44)),
                             WidgetSpan(alignment: PlaceholderAlignment.top, child: SizedBox(height: shaderMaskAnimation.value *20.0 *3)), // Placeholder for ShaderMask
                           ],
                         ),
@@ -1063,8 +1030,8 @@ class AnimatedCustomCard extends AnimatedWidget {const AnimatedCustomCard({super
                 ),
               ),
             ),
-            if (MediaQuery.of(context).size.height > 226) // AppBar 80 + 4*16 + 40 + 2*16 + Buffer 10
-              if (MediaQuery.of(context).size.width > 210) // 40 + 2*16 * 21/9 + 2*16 + Buffer 10
+            if (MediaQuery.heightOf(context) > 226) // AppBar 80 + 4*16 + 40 + 2*16 + Buffer 10
+              if (MediaQuery.widthOf(context) > 210) // 40 + 2*16 * 21/9 + 2*16 + Buffer 10
                 SizedBox( // Min height no overflow 40 + 2*16 = 72 -> Min width no overflow > 72 * 21/9 = 168 -> Min page width no overflow > 168 + 2*16 = 200
                   height: buttonSizeAnimation.value,
                   child: Row(
@@ -1072,14 +1039,14 @@ class AnimatedCustomCard extends AnimatedWidget {const AnimatedCustomCard({super
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: <Widget>[
                       Opacity(
-                        opacity: buttonOpacityAnimation.value,
+                        opacity: opacityAnimation.value,
                         child: OutlinedButton.icon(
                           style: OutlinedButton.styleFrom(
-                            iconColor: entry.onColor(),
-                            foregroundColor: entry.onColor(),
-                            side: BorderSide(color: entry.onColor()),
+                            iconColor: entry.onSurfaceVariant,
+                            foregroundColor: entry.onSurfaceVariant,
+                            side: BorderSide(color: entry.onSurfaceVariant),
                           ),
-                          icon: CrossPlatform.isWeb ? const Icon(Symbols.download_rounded) : (CrossPlatform.isIOS ? const Icon(Symbols.ios_share_rounded) : const Icon(Symbols.share_rounded)),
+                          icon: CrossPlatform.isWeb ? const Icon(Symbols.download_rounded, fill: 1) : (CrossPlatform.isIOS ? const Icon(Symbols.ios_share_rounded, fill: 1) : const Icon(Symbols.share_rounded, fill: 1)),
                           label: CrossPlatform.isWeb ? Text(CoreInstance.text.buttonDownload) : Text(CoreInstance.text.buttonShare),
                           onPressed: () {},
                       ),
@@ -1090,55 +1057,60 @@ class AnimatedCustomCard extends AnimatedWidget {const AnimatedCustomCard({super
           ],
         ),
       ),
-      if (MediaQuery.of(context).size.height > 90 && MediaQuery.of(context).size.width > 229) // AppBar 80 + Buffer 10 // 80 * 21/9 + 2*16 + Buffer 10
-        AppBar( // Min height no overflow preferredAppBarHeight 80 -> Min width no overflow > 80 * 21/9 = 187 -> Min page width no overflow > 187 + 2*16 = 219
-          systemOverlayStyle: SystemUiOverlayStyle( // On animation with animated app bar on top set system status bar icon brightness as onColor
-            // statusBarIconBrightness: (Theme.of(context).colorScheme.brightness == Brightness.light) ? Brightness.dark : Brightness.light, // On animation set system status bar icon brightness as colorScheme
-            statusBarIconBrightness: systemBarBrightState, // System status bar icon brightness state Android
-            statusBarBrightness: (systemBarBrightState == Brightness.light) ? Brightness.dark : Brightness.light, // System status bar icon brightness state iOS
-          ),
-          toolbarOpacity: appBarOpacityAnimation.value,
-          backgroundColor: Colors.transparent,
-          leading: IconButton(
-            icon: const Icon(Icons.close_rounded),
-            color: entry.onColor(),
-            onPressed: () {},
-          ),
-          actions: <Widget>[
-            if (entry.prompt != null)
+      if (MediaQuery.heightOf(context) > 90 && MediaQuery.widthOf(context) > 229) // AppBar 80 + Buffer 10 // 80 * 21/9 + 2*16 + Buffer 10
+        Opacity(
+          opacity: opacityAnimation.value,
+          child: AppBar( // Min height no overflow preferredAppBarHeight 80 -> Min width no overflow > 80 * 21/9 = 187 -> Min page width no overflow > 187 + 2*16 = 219
+            systemOverlayStyle: SystemUiOverlayStyle( // On animation with animated app bar on top set system status bar icon brightness as onColor
+              // statusBarIconBrightness: (Theme.of(context).colorScheme.brightness == Brightness.light) ? Brightness.dark : Brightness.light, // On animation set system status bar icon brightness as colorScheme
+              statusBarIconBrightness: (systemBarBrightState == Brightness.light) ? Brightness.dark : Brightness.light, // System status bar icon brightness state Android
+              statusBarBrightness: systemBarBrightState, // System status bar icon brightness state iOS
+            ),
+            // toolbarOpacity: opacityAnimation.value,
+            backgroundColor: Colors.transparent,
+            leading: IconButton(
+              icon: const Icon(Icons.close_rounded),
+              color: entry.onSurface,
+              onPressed: () {},
+            ),
+            actions: <Widget>[
+              if (entry.prompt != null)
+                IconButton(
+                  icon: const Icon(Symbols.chat_error_rounded, fill: 1),
+                  // visualDensity: VisualDensity.comfortable,
+                  color: entry.onSurfaceVariant,
+                  onPressed:  () {},
+                ),
               IconButton(
-                icon: const Icon(Symbols.chat_error_rounded),
-                visualDensity: VisualDensity.comfortable,
-                color: entry.onColor(),
+                icon: const Icon(Symbols.edit_calendar_rounded, fill: 1), // event, calendar_today, date_range, today, edit_calendar
+                // visualDensity: VisualDensity.comfortable,
+                color: entry.onSurfaceVariant,
                 onPressed:  () {},
               ),
-            IconButton(
-              icon: const Icon(Symbols.edit_calendar_rounded), // event, calendar_today, date_range, today, edit_calendar
-              visualDensity: VisualDensity.comfortable,
-              color: entry.onColor(),
-              onPressed:  () {},
-            ),
-            IconButton(
-              icon: const Icon(Symbols.edit_document_rounded),
-              visualDensity: VisualDensity.comfortable,
-              color: entry.onColor(),
-              onPressed:  () {},
-            ),
-            IconButton(
-              icon: const Icon(Symbols.delete_rounded),
-              color: entry.onColor(),
-              onPressed:  () {},
-            ),
-            if (CrossPlatform.isWeb)
-              const SizedBox(width: Constant.padding *2),
-            if (CrossPlatform.isWeb)
               IconButton(
-                icon: const Icon(Symbols.logout_rounded),
-                color: entry.onColor(),
+                icon: const Icon(Symbols.edit_document_rounded, fill: 1),
+                // visualDensity: VisualDensity.comfortable,
+                color: entry.onSurfaceVariant,
                 onPressed:  () {},
               ),
-            const SizedBox(width: (Constant.padding*2)-17), // Right spacing correction, resulting in Constant.padding*2
-          ],
+              IconButton(
+                icon: const Icon(Symbols.delete_rounded, fill: 1),
+                color: entry.onSurfaceVariant,
+                onPressed:  () {},
+              ),
+              const SizedBox(width: 4),
+
+              if (CrossPlatform.isWeb)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: IconButton(
+                    icon: const Icon(Symbols.logout_rounded),
+                    color: entry.onSurfaceVariant,
+                    onPressed:  () {},
+                  )
+                ),
+            ],
+          )
         ),
       ],
     );
